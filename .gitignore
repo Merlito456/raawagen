@@ -1,0 +1,35 @@
+# Excel files with sensitive data (keep local only)
+*.xlsx
+!*.xlsx  # This line excludes ALL Excel files from GitHub
+
+# Log files
+*.log
+streamlit_log.txt
+
+# Python cache
+__pycache__/
+*.py[cod]
+*.so
+.Python
+
+# Virtual environments
+venv/
+env/
+ENV/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+
+# User data
+personnel_data.json
