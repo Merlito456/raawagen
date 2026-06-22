@@ -146,6 +146,10 @@ def load_databases():
             df_req['Region'] = df_req['Region'].astype(str).str.upper().str.strip()
             df_req['Region'] = df_req['Region'].apply(lambda x: x if x in ['LUZ', 'VIS', 'MIN'] else 'MIN')
         
+        # Clean up Project column - strip whitespace
+        if 'Project' in df_req.columns:
+            df_req['Project'] = df_req['Project'].astype(str).str.strip()
+        
         for idx, row in df_req.iterrows():
             if 'ID #' in df_req.columns:
                 id_value = row.get('ID #', 'N/A')
@@ -416,6 +420,7 @@ df_db, df_req_db, df_engr_tech_db = load_databases()
 def get_requisitioner_for_territory_and_project(territory, project, region):
     """Get requisitioner profile based on territory, project, and region"""
     if df_req_db is not None and 'Territory no.' in df_req_db.columns:
+        # Try exact match first
         matching_reqs = df_req_db[
             (df_req_db['Territory no.'] == territory) &
             (df_req_db['Project'] == project) &
@@ -430,7 +435,29 @@ def get_requisitioner_for_territory_and_project(territory, project, region):
                 "id": format_id_number(req_row.get("ID #", "N/A")),
                 "contact": format_contact_number(req_row.get("Contact No.", "N/A"))
             }
+        
+        # If exact match fails, try partial match (project contains the base project name)
+        # This handles cases like "B2C_EUL MIGRATION - MIN - Territory 8" vs "B2C_EUL MIGRATION"
+        if project:
+            # Get the base project name (remove region and territory suffixes)
+            base_project = project.split(' - ')[0] if ' - ' in project else project
+            
+            matching_reqs = df_req_db[
+                (df_req_db['Territory no.'] == territory) &
+                (df_req_db['Project'].str.contains(base_project, case=False, na=False)) &
+                (df_req_db['Region'] == region)
+            ]
+            
+            if not matching_reqs.empty:
+                req_row = matching_reqs.iloc[0]
+                return {
+                    "name": str(req_row.get("Name", "N/A")),
+                    "dept": str(req_row.get("Dept./Group", "N/A")),
+                    "id": format_id_number(req_row.get("ID #", "N/A")),
+                    "contact": format_contact_number(req_row.get("Contact No.", "N/A"))
+                }
     
+    # Fallback - try without project filter
     if df_req_db is not None and 'Territory no.' in df_req_db.columns:
         matching_reqs = df_req_db[
             (df_req_db['Territory no.'] == territory) &
