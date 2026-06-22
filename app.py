@@ -135,7 +135,7 @@ def load_databases():
             df_sites['REGION'] = df_sites['REGION'].astype(str).str.upper().str.strip()
             df_sites['REGION'] = df_sites['REGION'].apply(lambda x: x if x in ['LUZ', 'VIS', 'MIN'] else 'MIN')
         
-        # Load Requisitioner Database
+        # Load Requisitioner Database - headers are in row 2 (index 1)
         df_req = pd.read_excel("Requisitioner.xlsx", header=1, dtype=str)
         df_req.columns = df_req.columns.str.strip()
         
@@ -159,14 +159,19 @@ def load_databases():
                     contact_value = 'N/A'
                 df_req.at[idx, 'Contact No.'] = format_contact_number(contact_value)
         
-        # Load Engineer/Technician Database
+        # Load Engineer/Technician Database - headers are in row 2 (index 1)
         try:
-            df_engr_tech = pd.read_excel("EngrTech.xlsx", header=0, dtype=str)
+            # Read with header=1 (row 2 in Excel)
+            df_engr_tech = pd.read_excel("EngrTech.xlsx", header=1, dtype=str)
             df_engr_tech.columns = df_engr_tech.columns.str.strip()
             
+            # Debug info
+            st.sidebar.write("=== EngrTech Headers ===")
+            st.sidebar.write(f"Columns found: {list(df_engr_tech.columns)}")
+            
             # Map columns from your actual headers
-            # Name -> Name
-            # Company -> Company
+            # Name -> Name (should already be correct)
+            # Company -> Company (should already be correct)
             # SEC ID -> ID No
             # REGION -> Region
             
@@ -192,7 +197,7 @@ def load_databases():
             if 'ID No' in df_engr_tech.columns:
                 df_engr_tech['ID No'] = df_engr_tech['ID No'].astype(str).apply(format_id_number)
             
-            # Drop empty rows
+            # Drop empty rows (rows where Name is NaN or empty)
             if 'Name' in df_engr_tech.columns:
                 df_engr_tech = df_engr_tech.dropna(subset=['Name'], how='all')
                 df_engr_tech = df_engr_tech[df_engr_tech['Name'].notna()]
@@ -216,11 +221,9 @@ def load_databases():
             else:
                 df_engr_tech['Region'] = ''
             
-            # Debug info in sidebar
-            st.sidebar.write("=== EngrTech Loaded ===")
-            st.sidebar.write(f"Columns: {list(df_engr_tech.columns)}")
-            st.sidebar.write(f"Rows: {len(df_engr_tech)}")
+            st.sidebar.write(f"Rows loaded: {len(df_engr_tech)}")
             if len(df_engr_tech) > 0:
+                st.sidebar.write("Sample data:")
                 st.sidebar.dataframe(df_engr_tech.head(3))
                 
         except Exception as e:
@@ -890,7 +893,7 @@ else:
                     # Show count
                     st.info(f"Showing {len(filtered_engr)} of {len(df_engr_tech_db)} personnel")
                     
-                    # Display filtered data - safe column selection
+                    # Display filtered data
                     display_cols = []
                     if 'Name' in filtered_engr.columns:
                         display_cols.append('Name')
@@ -915,9 +918,9 @@ else:
                             # Create a safe format function
                             def format_person(row_idx):
                                 try:
-                                    name = filtered_engr.loc[row_idx, 'Name'] if 'Name' in filtered_engr.columns else 'Unknown'
-                                    company = filtered_engr.loc[row_idx, 'Company'] if 'Company' in filtered_engr.columns else 'Unknown'
-                                    id_no = filtered_engr.loc[row_idx, 'ID No'] if 'ID No' in filtered_engr.columns else 'N/A'
+                                    name = filtered_engr.loc[row_idx, 'Name']
+                                    company = filtered_engr.loc[row_idx, 'Company']
+                                    id_no = filtered_engr.loc[row_idx, 'ID No']
                                     return f"{name} - {company} (ID: {id_no})"
                                 except:
                                     return f"Person {row_idx}"
@@ -940,9 +943,9 @@ else:
                                                 person = filtered_engr.loc[idx]
                                                 if not any(p['name'] == person['Name'] for p in st.session_state.personnel_list):
                                                     st.session_state.personnel_list.append({
-                                                        "name": person['Name'] if 'Name' in filtered_engr.columns else 'Unknown',
-                                                        "company": person['Company'] if 'Company' in filtered_engr.columns else 'Unknown',
-                                                        "id_no": person['ID No'] if 'ID No' in filtered_engr.columns else 'N/A'
+                                                        "name": person['Name'],
+                                                        "company": person['Company'],
+                                                        "id_no": person['ID No']
                                                     })
                                                     added_count += 1
                                             except:
@@ -1089,8 +1092,8 @@ else:
                         if options_list:
                             def format_person_mixed(row_idx):
                                 try:
-                                    name = filtered_engr.loc[row_idx, 'Name'] if 'Name' in filtered_engr.columns else 'Unknown'
-                                    company = filtered_engr.loc[row_idx, 'Company'] if 'Company' in filtered_engr.columns else 'Unknown'
+                                    name = filtered_engr.loc[row_idx, 'Name']
+                                    company = filtered_engr.loc[row_idx, 'Company']
                                     return f"{name} - {company}"
                                 except:
                                     return f"Person {row_idx}"
@@ -1110,9 +1113,9 @@ else:
                                             person = filtered_engr.loc[idx]
                                             if not any(p['name'] == person['Name'] for p in st.session_state.personnel_list):
                                                 st.session_state.personnel_list.append({
-                                                    "name": person['Name'] if 'Name' in filtered_engr.columns else 'Unknown',
-                                                    "company": person['Company'] if 'Company' in filtered_engr.columns else 'Unknown',
-                                                    "id_no": person['ID No'] if 'ID No' in filtered_engr.columns else 'N/A'
+                                                    "name": person['Name'],
+                                                    "company": person['Company'],
+                                                    "id_no": person['ID No']
                                                 })
                                                 added_count += 1
                                         except:
