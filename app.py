@@ -174,7 +174,6 @@ def load_databases():
             if 'SEC ID' in df_engr_tech.columns:
                 df_engr_tech.rename(columns={'SEC ID': 'ID No'}, inplace=True)
             elif 'ID No' not in df_engr_tech.columns:
-                # Try other possible names
                 for col in ['ID_NO', 'ID NUMBER', 'ID', 'SEC_ID']:
                     if col in df_engr_tech.columns:
                         df_engr_tech.rename(columns={col: 'ID No'}, inplace=True)
@@ -217,10 +216,12 @@ def load_databases():
             else:
                 df_engr_tech['Region'] = ''
             
-            # Debug info
+            # Debug info in sidebar
             st.sidebar.write("=== EngrTech Loaded ===")
             st.sidebar.write(f"Columns: {list(df_engr_tech.columns)}")
             st.sidebar.write(f"Rows: {len(df_engr_tech)}")
+            if len(df_engr_tech) > 0:
+                st.sidebar.dataframe(df_engr_tech.head(3))
                 
         except Exception as e:
             st.warning(f"EngrTech.xlsx error: {e}")
@@ -911,11 +912,21 @@ else:
                         options_list = filtered_engr.index.tolist()
                         
                         if options_list:
+                            # Create a safe format function
+                            def format_person(row_idx):
+                                try:
+                                    name = filtered_engr.loc[row_idx, 'Name'] if 'Name' in filtered_engr.columns else 'Unknown'
+                                    company = filtered_engr.loc[row_idx, 'Company'] if 'Company' in filtered_engr.columns else 'Unknown'
+                                    id_no = filtered_engr.loc[row_idx, 'ID No'] if 'ID No' in filtered_engr.columns else 'N/A'
+                                    return f"{name} - {company} (ID: {id_no})"
+                                except:
+                                    return f"Person {row_idx}"
+                            
                             # Multi-select with filtered data
                             selected_indices = st.multiselect(
                                 "Select Engineers/Technicians to add:",
                                 options=options_list,
-                                format_func=lambda x: f"{filtered_engr.loc[x, 'Name']} - {filtered_engr.loc[x, 'Company']} (ID: {filtered_engr.loc[x, 'ID No']})",
+                                format_func=format_person,
                                 key="selected_personnel_db_main"
                             )
                             
@@ -925,14 +936,17 @@ else:
                                     if selected_indices:
                                         added_count = 0
                                         for idx in selected_indices:
-                                            person = filtered_engr.loc[idx]
-                                            if not any(p['name'] == person['Name'] for p in st.session_state.personnel_list):
-                                                st.session_state.personnel_list.append({
-                                                    "name": person['Name'],
-                                                    "company": person['Company'],
-                                                    "id_no": person['ID No']
-                                                })
-                                                added_count += 1
+                                            try:
+                                                person = filtered_engr.loc[idx]
+                                                if not any(p['name'] == person['Name'] for p in st.session_state.personnel_list):
+                                                    st.session_state.personnel_list.append({
+                                                        "name": person['Name'] if 'Name' in filtered_engr.columns else 'Unknown',
+                                                        "company": person['Company'] if 'Company' in filtered_engr.columns else 'Unknown',
+                                                        "id_no": person['ID No'] if 'ID No' in filtered_engr.columns else 'N/A'
+                                                    })
+                                                    added_count += 1
+                                            except:
+                                                pass
                                         st.success(f"Added {added_count} personnel to manifest!")
                                         st.rerun()
                                     else:
@@ -1073,10 +1087,18 @@ else:
                         options_list = filtered_engr.index.tolist()
                         
                         if options_list:
+                            def format_person_mixed(row_idx):
+                                try:
+                                    name = filtered_engr.loc[row_idx, 'Name'] if 'Name' in filtered_engr.columns else 'Unknown'
+                                    company = filtered_engr.loc[row_idx, 'Company'] if 'Company' in filtered_engr.columns else 'Unknown'
+                                    return f"{name} - {company}"
+                                except:
+                                    return f"Person {row_idx}"
+                            
                             selected_indices = st.multiselect(
                                 "Select personnel:",
                                 options=options_list,
-                                format_func=lambda x: f"{filtered_engr.loc[x, 'Name']} - {filtered_engr.loc[x, 'Company']}",
+                                format_func=format_person_mixed,
                                 key="mixed_selection"
                             )
                             
@@ -1084,14 +1106,17 @@ else:
                                 if selected_indices:
                                     added_count = 0
                                     for idx in selected_indices:
-                                        person = filtered_engr.loc[idx]
-                                        if not any(p['name'] == person['Name'] for p in st.session_state.personnel_list):
-                                            st.session_state.personnel_list.append({
-                                                "name": person['Name'],
-                                                "company": person['Company'],
-                                                "id_no": person['ID No']
-                                            })
-                                            added_count += 1
+                                        try:
+                                            person = filtered_engr.loc[idx]
+                                            if not any(p['name'] == person['Name'] for p in st.session_state.personnel_list):
+                                                st.session_state.personnel_list.append({
+                                                    "name": person['Name'] if 'Name' in filtered_engr.columns else 'Unknown',
+                                                    "company": person['Company'] if 'Company' in filtered_engr.columns else 'Unknown',
+                                                    "id_no": person['ID No'] if 'ID No' in filtered_engr.columns else 'N/A'
+                                                })
+                                                added_count += 1
+                                        except:
+                                            pass
                                     st.success(f"Added {added_count} personnel!")
                                     st.rerun()
                                 else:
