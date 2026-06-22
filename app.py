@@ -135,7 +135,7 @@ def load_databases():
             df_sites['REGION'] = df_sites['REGION'].astype(str).str.upper().str.strip()
             df_sites['REGION'] = df_sites['REGION'].apply(lambda x: x if x in ['LUZ', 'VIS', 'MIN'] else 'MIN')
         
-        # Load Requisitioner Database - headers are in row 2 (index 1)
+        # Load Requisitioner Database
         df_req = pd.read_excel("Requisitioner.xlsx", header=1, dtype=str)
         df_req.columns = df_req.columns.str.strip()
         
@@ -161,21 +161,10 @@ def load_databases():
         
         # Load Engineer/Technician Database - headers are in row 2 (index 1)
         try:
-            # Read with header=1 (row 2 in Excel)
             df_engr_tech = pd.read_excel("EngrTech.xlsx", header=1, dtype=str)
             df_engr_tech.columns = df_engr_tech.columns.str.strip()
             
-            # Debug info
-            st.sidebar.write("=== EngrTech Headers ===")
-            st.sidebar.write(f"Columns found: {list(df_engr_tech.columns)}")
-            
-            # Map columns from your actual headers
-            # Name -> Name (should already be correct)
-            # Company -> Company (should already be correct)
-            # SEC ID -> ID No
-            # REGION -> Region
-            
-            # Check if 'SEC ID' exists and rename to 'ID No'
+            # Map columns
             if 'SEC ID' in df_engr_tech.columns:
                 df_engr_tech.rename(columns={'SEC ID': 'ID No'}, inplace=True)
             elif 'ID No' not in df_engr_tech.columns:
@@ -184,7 +173,6 @@ def load_databases():
                         df_engr_tech.rename(columns={col: 'ID No'}, inplace=True)
                         break
             
-            # Check if 'REGION' exists and rename to 'Region'
             if 'REGION' in df_engr_tech.columns:
                 df_engr_tech.rename(columns={'REGION': 'Region'}, inplace=True)
             elif 'Region' not in df_engr_tech.columns:
@@ -197,7 +185,7 @@ def load_databases():
             if 'ID No' in df_engr_tech.columns:
                 df_engr_tech['ID No'] = df_engr_tech['ID No'].astype(str).apply(format_id_number)
             
-            # Drop empty rows (rows where Name is NaN or empty)
+            # Drop empty rows
             if 'Name' in df_engr_tech.columns:
                 df_engr_tech = df_engr_tech.dropna(subset=['Name'], how='all')
                 df_engr_tech = df_engr_tech[df_engr_tech['Name'].notna()]
@@ -220,11 +208,6 @@ def load_databases():
                 df_engr_tech['Region'] = df_engr_tech['Region'].apply(lambda x: x if x in ['LUZ', 'VIS', 'MIN'] else '')
             else:
                 df_engr_tech['Region'] = ''
-            
-            st.sidebar.write(f"Rows loaded: {len(df_engr_tech)}")
-            if len(df_engr_tech) > 0:
-                st.sidebar.write("Sample data:")
-                st.sidebar.dataframe(df_engr_tech.head(3))
                 
         except Exception as e:
             st.warning(f"EngrTech.xlsx error: {e}")
