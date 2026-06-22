@@ -161,61 +161,37 @@ def load_databases():
         
         # Load Engineer/Technician Database
         try:
-            # Read the file with header=0 first to check structure
-            df_raw = pd.read_excel("EngrTech.xlsx", header=None, dtype=str)
-            
-            # Try to find the header row
-            header_row = 0
-            for i in range(min(5, len(df_raw))):
-                row_values = df_raw.iloc[i].astype(str).str.lower().str.strip()
-                if 'name' in row_values.values or 'company' in row_values.values:
-                    header_row = i
-                    break
-            
-            # Read with the detected header row
-            df_engr_tech = pd.read_excel("EngrTech.xlsx", header=header_row, dtype=str)
+            df_engr_tech = pd.read_excel("EngrTech.xlsx", header=0, dtype=str)
             df_engr_tech.columns = df_engr_tech.columns.str.strip()
             
-            # Debug info in sidebar
-            st.sidebar.write("=== EngrTech Debug ===")
-            st.sidebar.write(f"Header row used: {header_row}")
-            st.sidebar.write(f"Columns found: {list(df_engr_tech.columns)}")
-            st.sidebar.write(f"Rows loaded: {len(df_engr_tech)}")
-            
-            # If no columns found, try reading with header=0
-            if len(df_engr_tech.columns) == 0 or 'Name' not in df_engr_tech.columns:
-                df_engr_tech = pd.read_excel("EngrTech.xlsx", header=0, dtype=str)
-                df_engr_tech.columns = df_engr_tech.columns.str.strip()
-                st.sidebar.write("Tried header=0, columns:", list(df_engr_tech.columns))
-            
             # Map columns
-            if 'Name' in df_engr_tech.columns:
-                pass
-            elif 'NAME' in df_engr_tech.columns:
-                df_engr_tech.rename(columns={'NAME': 'Name'}, inplace=True)
-            elif 'name' in df_engr_tech.columns:
-                df_engr_tech.rename(columns={'name': 'Name'}, inplace=True)
+            if 'Name' not in df_engr_tech.columns:
+                for col in ['NAME', 'name']:
+                    if col in df_engr_tech.columns:
+                        df_engr_tech.rename(columns={col: 'Name'}, inplace=True)
+                        break
             
-            if 'Company' in df_engr_tech.columns:
-                pass
-            elif 'COMPANY' in df_engr_tech.columns:
-                df_engr_tech.rename(columns={'COMPANY': 'Company'}, inplace=True)
-            elif 'company' in df_engr_tech.columns:
-                df_engr_tech.rename(columns={'company': 'Company'}, inplace=True)
-                
-            # Map SEC ID to ID No
-            for col in ['SEC ID', 'ID_NO', 'ID No', 'ID NUMBER', 'ID']:
-                if col in df_engr_tech.columns:
-                    df_engr_tech.rename(columns={col: 'ID No'}, inplace=True)
-                    break
+            if 'Company' not in df_engr_tech.columns:
+                for col in ['COMPANY', 'company', 'Vendor']:
+                    if col in df_engr_tech.columns:
+                        df_engr_tech.rename(columns={col: 'Company'}, inplace=True)
+                        break
+            
+            if 'ID No' not in df_engr_tech.columns:
+                for col in ['ID_NO', 'ID NUMBER', 'SEC ID', 'ID']:
+                    if col in df_engr_tech.columns:
+                        df_engr_tech.rename(columns={col: 'ID No'}, inplace=True)
+                        break
+            
+            if 'Region' not in df_engr_tech.columns:
+                for col in ['REGION', 'region']:
+                    if col in df_engr_tech.columns:
+                        df_engr_tech.rename(columns={col: 'Region'}, inplace=True)
+                        break
             
             # Format IDs
             if 'ID No' in df_engr_tech.columns:
-                for idx, row in df_engr_tech.iterrows():
-                    id_value = row.get('ID No', '')
-                    if pd.isna(id_value):
-                        id_value = ''
-                    df_engr_tech.at[idx, 'ID No'] = format_id_number(id_value)
+                df_engr_tech['ID No'] = df_engr_tech['ID No'].astype(str).apply(format_id_number)
             
             # Drop empty rows
             if 'Name' in df_engr_tech.columns:
@@ -240,10 +216,6 @@ def load_databases():
                 df_engr_tech['Region'] = df_engr_tech['Region'].apply(lambda x: x if x in ['LUZ', 'VIS', 'MIN'] else '')
             else:
                 df_engr_tech['Region'] = ''
-            
-            st.sidebar.write(f"Final rows: {len(df_engr_tech)}")
-            if len(df_engr_tech) > 0:
-                st.sidebar.dataframe(df_engr_tech.head(3))
                 
         except Exception as e:
             st.warning(f"EngrTech.xlsx error: {e}")
@@ -837,11 +809,7 @@ else:
             st.session_state.personnel_list = []
         
         if selection_method == "Load from Database":
-            # Check if df_engr_tech_db is loaded properly
-            if df_engr_tech_db is None:
-                st.error("❌ Engineer/Technician database not loaded!")
-                st.info("Please check that EngrTech.xlsx exists and has the correct format.")
-            elif df_engr_tech_db.empty:
+            if df_engr_tech_db is None or df_engr_tech_db.empty:
                 st.warning("⚠️ No personnel records found in EngrTech.xlsx")
                 st.info("""
                 **Expected format for EngrTech.xlsx:**
@@ -854,43 +822,58 @@ else:
                 st.success(f"📋 Found {len(df_engr_tech_db)} personnel records in database")
                 
                 with st.expander("📁 Select Personnel from Database", expanded=True):
-                    # Company filter
+                    # Get unique companies and regions
                     company_list = sorted(df_engr_tech_db['Company'].unique())
                     company_list = [c for c in company_list if str(c).strip() != '']
                     
-                    col_company, col_region_filter = st.columns(2)
+                    region_list = []
+                    if 'Region' in df_engr_tech_db.columns:
+                        region_list = sorted(df_engr_tech_db['Region'].unique())
+                        region_list = [r for r in region_list if str(r).strip() != '']
                     
-                    with col_company:
+                    # Filters in columns
+                    col_filters = st.columns(3)
+                    
+                    with col_filters[0]:
                         if company_list:
                             selected_companies = st.multiselect(
-                                "Filter by Company (optional):",
+                                "Filter by Company:",
                                 options=['All Companies'] + company_list,
-                                default=['All Companies']
+                                default=['All Companies'],
+                                key="company_filter_main"
                             )
                         else:
                             selected_companies = ['All Companies']
                             st.info("No companies found")
                     
-                    with col_region_filter:
-                        if 'Region' in df_engr_tech_db.columns and not df_engr_tech_db['Region'].isna().all():
-                            region_options = ['All Regions', 'LUZ', 'VIS', 'MIN']
-                            selected_region_filter = st.selectbox(
+                    with col_filters[1]:
+                        if region_list:
+                            selected_regions = st.multiselect(
                                 "Filter by Region:",
-                                options=region_options
+                                options=['All Regions'] + region_list,
+                                default=['All Regions'],
+                                key="region_filter_main"
                             )
                         else:
-                            selected_region_filter = 'All Regions'
+                            selected_regions = ['All Regions']
+                            st.info("No regions found")
                     
+                    with col_filters[2]:
+                        search_term = st.text_input("🔍 Search:", key="personnel_search_main")
+                    
+                    # Apply filters
                     filtered_engr = df_engr_tech_db.copy()
                     
+                    # Company filter
                     if selected_companies and 'All Companies' not in selected_companies:
                         filtered_engr = filtered_engr[filtered_engr['Company'].isin(selected_companies)]
                     
-                    if selected_region_filter != 'All Regions' and 'Region' in filtered_engr.columns:
-                        filtered_engr = filtered_engr[filtered_engr['Region'].str.upper() == selected_region_filter.upper()]
+                    # Region filter
+                    if selected_regions and 'All Regions' not in selected_regions:
+                        if 'Region' in filtered_engr.columns:
+                            filtered_engr = filtered_engr[filtered_engr['Region'].isin(selected_regions)]
                     
-                    search_term = st.text_input("🔍 Search by Name, Company, or ID:", key="personnel_search")
-                    
+                    # Search filter
                     if search_term:
                         filtered_engr = filtered_engr[
                             filtered_engr['Name'].astype(str).str.contains(search_term, case=False, na=False) |
@@ -898,36 +881,52 @@ else:
                             filtered_engr['ID No'].astype(str).str.contains(search_term, case=False, na=False)
                         ]
                     
+                    # Show count
                     st.info(f"Showing {len(filtered_engr)} of {len(df_engr_tech_db)} personnel")
                     
+                    # Display filtered data
                     if not filtered_engr.empty:
+                        # Prepare display columns
+                        display_cols = ['Name', 'Company', 'ID No']
+                        if 'Region' in filtered_engr.columns:
+                            display_cols.append('Region')
+                        
                         st.dataframe(
-                            filtered_engr[['Name', 'Company', 'ID No', 'Region']] if 'Region' in filtered_engr.columns else filtered_engr[['Name', 'Company', 'ID No']],
+                            filtered_engr[display_cols],
                             hide_index=True,
                             use_container_width=True
                         )
                         
+                        # Multi-select with filtered data
                         selected_indices = st.multiselect(
                             "Select Engineers/Technicians to add:",
                             options=filtered_engr.index.tolist(),
                             format_func=lambda x: f"{filtered_engr.loc[x, 'Name']} - {filtered_engr.loc[x, 'Company']} (ID: {filtered_engr.loc[x, 'ID No']})",
-                            key="selected_personnel_db"
+                            key="selected_personnel_db_main"
                         )
                         
-                        if st.button("➕ Add Selected Personnel to Manifest"):
-                            for idx in selected_indices:
-                                person = filtered_engr.loc[idx]
-                                if not any(p['name'] == person['Name'] for p in st.session_state.personnel_list):
-                                    st.session_state.personnel_list.append({
-                                        "name": person['Name'],
-                                        "company": person['Company'],
-                                        "id_no": person['ID No']
-                                    })
-                            st.success(f"Added {len(selected_indices)} personnel to manifest!")
-                            st.rerun()
+                        col_add, col_clear = st.columns([1, 4])
+                        with col_add:
+                            if st.button("➕ Add Selected to Manifest", use_container_width=True):
+                                if selected_indices:
+                                    added_count = 0
+                                    for idx in selected_indices:
+                                        person = filtered_engr.loc[idx]
+                                        if not any(p['name'] == person['Name'] for p in st.session_state.personnel_list):
+                                            st.session_state.personnel_list.append({
+                                                "name": person['Name'],
+                                                "company": person['Company'],
+                                                "id_no": person['ID No']
+                                            })
+                                            added_count += 1
+                                    st.success(f"Added {added_count} personnel to manifest!")
+                                    st.rerun()
+                                else:
+                                    st.warning("Please select personnel first")
                     else:
                         st.warning("No personnel match the current filters")
                 
+                # Manual entry section
                 st.markdown("---")
                 st.subheader("Or Add Manually")
                 
@@ -950,6 +949,7 @@ else:
                         st.rerun()
         
         if selection_method == "Manual Input":
+            # Track visibility dynamically up to 40 entries
             for i in range(1, 41):
                 if f"p_show_{i}" not in st.session_state:
                     st.session_state[f"p_show_{i}"] = True if i <= 4 else False
@@ -981,42 +981,52 @@ else:
             st.subheader("Database Selection")
             if df_engr_tech_db is not None and not df_engr_tech_db.empty:
                 with st.expander("📁 Select from Database", expanded=True):
+                    # Get unique companies and regions
                     company_list = sorted(df_engr_tech_db['Company'].unique())
                     company_list = [c for c in company_list if str(c).strip() != '']
                     
-                    col_company, col_region_filter = st.columns(2)
+                    region_list = []
+                    if 'Region' in df_engr_tech_db.columns:
+                        region_list = sorted(df_engr_tech_db['Region'].unique())
+                        region_list = [r for r in region_list if str(r).strip() != '']
                     
-                    with col_company:
+                    # Filters
+                    col_filters = st.columns(3)
+                    
+                    with col_filters[0]:
                         if company_list:
                             selected_companies = st.multiselect(
                                 "Filter by Company:",
                                 options=['All Companies'] + company_list,
                                 default=['All Companies'],
-                                key="mixed_company_filter"
+                                key="company_filter_mixed"
                             )
                         else:
                             selected_companies = ['All Companies']
                     
-                    with col_region_filter:
-                        if 'Region' in df_engr_tech_db.columns and not df_engr_tech_db['Region'].isna().all():
-                            region_options = ['All Regions', 'LUZ', 'VIS', 'MIN']
-                            selected_region_filter = st.selectbox(
+                    with col_filters[1]:
+                        if region_list:
+                            selected_regions = st.multiselect(
                                 "Filter by Region:",
-                                options=region_options,
-                                key="mixed_region_filter"
+                                options=['All Regions'] + region_list,
+                                default=['All Regions'],
+                                key="region_filter_mixed"
                             )
                         else:
-                            selected_region_filter = 'All Regions'
+                            selected_regions = ['All Regions']
                     
+                    with col_filters[2]:
+                        search_term = st.text_input("🔍 Search:", key="mixed_search")
+                    
+                    # Apply filters
                     filtered_engr = df_engr_tech_db.copy()
                     
                     if selected_companies and 'All Companies' not in selected_companies:
                         filtered_engr = filtered_engr[filtered_engr['Company'].isin(selected_companies)]
                     
-                    if selected_region_filter != 'All Regions' and 'Region' in filtered_engr.columns:
-                        filtered_engr = filtered_engr[filtered_engr['Region'].str.upper() == selected_region_filter.upper()]
-                    
-                    search_term = st.text_input("🔍 Search:", key="mixed_search")
+                    if selected_regions and 'All Regions' not in selected_regions:
+                        if 'Region' in filtered_engr.columns:
+                            filtered_engr = filtered_engr[filtered_engr['Region'].isin(selected_regions)]
                     
                     if search_term:
                         filtered_engr = filtered_engr[
@@ -1026,6 +1036,16 @@ else:
                         ]
                     
                     if not filtered_engr.empty:
+                        display_cols = ['Name', 'Company', 'ID No']
+                        if 'Region' in filtered_engr.columns:
+                            display_cols.append('Region')
+                        
+                        st.dataframe(
+                            filtered_engr[display_cols],
+                            hide_index=True,
+                            use_container_width=True
+                        )
+                        
                         selected_indices = st.multiselect(
                             "Select personnel:",
                             options=filtered_engr.index.tolist(),
@@ -1034,16 +1054,21 @@ else:
                         )
                         
                         if st.button("➕ Add Selected", key="add_mixed"):
-                            for idx in selected_indices:
-                                person = filtered_engr.loc[idx]
-                                if not any(p['name'] == person['Name'] for p in st.session_state.personnel_list):
-                                    st.session_state.personnel_list.append({
-                                        "name": person['Name'],
-                                        "company": person['Company'],
-                                        "id_no": person['ID No']
-                                    })
-                            st.success(f"Added {len(selected_indices)} personnel!")
-                            st.rerun()
+                            if selected_indices:
+                                added_count = 0
+                                for idx in selected_indices:
+                                    person = filtered_engr.loc[idx]
+                                    if not any(p['name'] == person['Name'] for p in st.session_state.personnel_list):
+                                        st.session_state.personnel_list.append({
+                                            "name": person['Name'],
+                                            "company": person['Company'],
+                                            "id_no": person['ID No']
+                                        })
+                                        added_count += 1
+                                st.success(f"Added {added_count} personnel!")
+                                st.rerun()
+                            else:
+                                st.warning("Please select personnel first")
             
             st.markdown("---")
             st.subheader("Manual Addition")
