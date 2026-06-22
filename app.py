@@ -884,13 +884,18 @@ else:
                     # Show count
                     st.info(f"Showing {len(filtered_engr)} of {len(df_engr_tech_db)} personnel")
                     
-                    # Display filtered data
-                    if not filtered_engr.empty:
-                        # Prepare display columns
-                        display_cols = ['Name', 'Company', 'ID No']
-                        if 'Region' in filtered_engr.columns:
-                            display_cols.append('Region')
-                        
+                    # Display filtered data - safe column selection
+                    display_cols = []
+                    if 'Name' in filtered_engr.columns:
+                        display_cols.append('Name')
+                    if 'Company' in filtered_engr.columns:
+                        display_cols.append('Company')
+                    if 'ID No' in filtered_engr.columns:
+                        display_cols.append('ID No')
+                    if 'Region' in filtered_engr.columns:
+                        display_cols.append('Region')
+                    
+                    if not filtered_engr.empty and display_cols:
                         st.dataframe(
                             filtered_engr[display_cols],
                             hide_index=True,
@@ -1036,15 +1041,23 @@ else:
                         ]
                     
                     if not filtered_engr.empty:
-                        display_cols = ['Name', 'Company', 'ID No']
+                        # Safe column selection
+                        display_cols = []
+                        if 'Name' in filtered_engr.columns:
+                            display_cols.append('Name')
+                        if 'Company' in filtered_engr.columns:
+                            display_cols.append('Company')
+                        if 'ID No' in filtered_engr.columns:
+                            display_cols.append('ID No')
                         if 'Region' in filtered_engr.columns:
                             display_cols.append('Region')
                         
-                        st.dataframe(
-                            filtered_engr[display_cols],
-                            hide_index=True,
-                            use_container_width=True
-                        )
+                        if display_cols:
+                            st.dataframe(
+                                filtered_engr[display_cols],
+                                hide_index=True,
+                                use_container_width=True
+                            )
                         
                         selected_indices = st.multiselect(
                             "Select personnel:",
