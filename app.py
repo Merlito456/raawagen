@@ -17,6 +17,7 @@ st.set_page_config(
 # --- CUSTOM CSS FOR PROFESSIONAL DESIGN ---
 st.markdown("""
 <style>
+    /* Main header styling */
     .main-header {
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         padding: 1.5rem;
@@ -24,6 +25,8 @@ st.markdown("""
         color: white;
         margin-bottom: 2rem;
     }
+    
+    /* Card styling */
     .custom-card {
         background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
         padding: 1.5rem;
@@ -31,6 +34,8 @@ st.markdown("""
         margin: 1rem 0;
         box-shadow: 0 4px 6px rgba(0,0,0,0.1);
     }
+    
+    /* Feature box styling */
     .feature-box {
         background: white;
         padding: 1rem;
@@ -39,6 +44,8 @@ st.markdown("""
         border-left: 4px solid #667eea;
         box-shadow: 0 2px 4px rgba(0,0,0,0.05);
     }
+    
+    /* Advantage box styling */
     .advantage-box {
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         padding: 1rem;
@@ -46,6 +53,13 @@ st.markdown("""
         margin: 0.5rem 0;
         color: white;
     }
+    
+    /* Sidebar styling */
+    .sidebar-content {
+        padding: 1rem;
+    }
+    
+    /* Button styling */
     .stButton > button {
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         color: white;
@@ -54,20 +68,30 @@ st.markdown("""
         border-radius: 5px;
         transition: all 0.3s ease;
     }
+    
     .stButton > button:hover {
         transform: translateY(-2px);
         box-shadow: 0 4px 8px rgba(0,0,0,0.2);
     }
+    
+    /* Success message styling */
     .stSuccess {
         background: linear-gradient(135deg, #84fab0 0%, #8fd3f4 100%);
         padding: 1rem;
         border-radius: 10px;
     }
+    
+    /* Info box styling */
     .info-box {
         background: #e3f2fd;
         padding: 1rem;
         border-radius: 10px;
         border-left: 4px solid #2196f3;
+    }
+    
+    /* Date input styling */
+    .stDateInput {
+        width: 100%;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -77,24 +101,33 @@ def format_contact_number(contact):
     if not contact or pd.isna(contact) or contact == 'N/A':
         return "N/A"
     
+    # Convert to string and strip
     contact_str = str(contact).strip()
+    
+    # Remove any non-digit characters
     contact_str = ''.join(filter(str.isdigit, contact_str))
     
+    # Check if it's a valid number
     if len(contact_str) == 10:
+        # Starts with 9, add leading 0
         if contact_str.startswith('9'):
             return '0' + contact_str
         else:
             return contact_str
     elif len(contact_str) == 11:
+        # Already has leading 0 or starts with 63
         if contact_str.startswith('0'):
             return contact_str
         elif contact_str.startswith('63'):
+            # Convert from 63xxx to 0xxx
             return '0' + contact_str[2:]
         else:
             return contact_str
     elif len(contact_str) == 12 and contact_str.startswith('639'):
+        # 639xxx format, convert to 09xxx
         return '0' + contact_str[2:]
     else:
+        # Return as-is if can't format
         return contact_str
 
 def format_id_number(id_num):
@@ -102,14 +135,19 @@ def format_id_number(id_num):
     if not id_num or pd.isna(id_num) or id_num == 'N/A':
         return "N/A"
     
+    # Convert to string
     id_str = str(id_num).strip()
     
+    # If it's a float with .0, convert to integer
     try:
+        # Check if it's a number with decimal
         if '.' in id_str:
+            # Check if it's like "7796.0"
             float_val = float(id_str)
             if float_val.is_integer():
                 return str(int(float_val))
             else:
+                # Keep as string if not integer
                 return id_str
         else:
             return id_str
@@ -123,42 +161,61 @@ def load_databases():
         # Load Main Site Database
         df_sites = pd.read_excel("Globe FO Engr Conatct_Vendor.xlsx", sheet_name="MIN")
         df_sites['PLAID'] = df_sites['PLAID'].astype(str).str.strip()
+        # Normalize: Remove the word 'Territory' and whitespace to just get the number
         df_sites['TERRITORY'] = df_sites['TERRITORY'].astype(str).str.replace('Territory', '', case=False).str.strip()
         
-        # Load Requisitioner Database with Project and Region columns
+        # Standardize REGION column (LUZ, VIS, MIN)
+        if 'REGION' in df_sites.columns:
+            df_sites['REGION'] = df_sites['REGION'].astype(str).str.upper().str.strip()
+            df_sites['REGION'] = df_sites['REGION'].apply(lambda x: x if x in ['LUZ', 'VIS', 'MIN'] else 'MIN')
+        
+        # Load Requisitioner Database - FIXED: Use dtype=str to avoid float conversion issues
         df_req = pd.read_excel("Requisitioner.xlsx", header=1, dtype=str)
+        
+        # Clean up column names
         df_req.columns = df_req.columns.str.strip()
         
+        # Normalize: Remove the word 'Territory' and whitespace to just get the number
         if 'Territory no.' in df_req.columns:
             df_req['Territory no.'] = df_req['Territory no.'].astype(str).str.replace('Territory', '', case=False).str.strip()
         
-        # Format requisitioner data
+        # Standardize Region column (LUZ, VIS, MIN)
+        if 'Region' in df_req.columns:
+            df_req['Region'] = df_req['Region'].astype(str).str.upper().str.strip()
+            df_req['Region'] = df_req['Region'].apply(lambda x: x if x in ['LUZ', 'VIS', 'MIN'] else 'MIN')
+        
+        # Format requisitioner data - handle potential NaN values
         for idx, row in df_req.iterrows():
+            # Format ID number (remove decimal)
             if 'ID #' in df_req.columns:
                 id_value = row.get('ID #', 'N/A')
                 if pd.isna(id_value):
                     id_value = 'N/A'
                 df_req.at[idx, 'ID #'] = format_id_number(id_value)
             
+            # Format contact number (add leading 0)
             if 'Contact No.' in df_req.columns:
                 contact_value = row.get('Contact No.', 'N/A')
                 if pd.isna(contact_value):
                     contact_value = 'N/A'
                 df_req.at[idx, 'Contact No.'] = format_contact_number(contact_value)
         
-        # Load Engineer/Technician Database with Region column
+        # Load Engineer/Technician Database
         try:
+            # Skip the first row (title row) and use the second row as header, read all as string
             df_engr_tech = pd.read_excel("EngrTech.xlsx", header=1, dtype=str)
+            
+            # Standardize column names
             df_engr_tech.columns = df_engr_tech.columns.str.strip()
             
-            # Map columns
+            # Check for expected columns and map them
             if 'Name' in df_engr_tech.columns:
-                pass
+                pass  # Already has correct column name
             elif 'NAME' in df_engr_tech.columns:
                 df_engr_tech.rename(columns={'NAME': 'Name'}, inplace=True)
                 
             if 'Company' in df_engr_tech.columns:
-                pass
+                pass  # Already has correct column name
             elif 'COMPANY' in df_engr_tech.columns:
                 df_engr_tech.rename(columns={'COMPANY': 'Company'}, inplace=True)
                 
@@ -168,7 +225,7 @@ def load_databases():
             elif 'ID_NO' in df_engr_tech.columns:
                 df_engr_tech.rename(columns={'ID_NO': 'ID No'}, inplace=True)
             elif 'ID No' in df_engr_tech.columns:
-                pass
+                pass  # Already has correct column name
             elif 'ID NUMBER' in df_engr_tech.columns:
                 df_engr_tech.rename(columns={'ID NUMBER': 'ID No'}, inplace=True)
             
@@ -180,13 +237,13 @@ def load_databases():
                         id_value = ''
                     df_engr_tech.at[idx, 'ID No'] = format_id_number(id_value)
             
-            # Drop empty rows
+            # Drop any rows where Name is NaN or empty
             if 'Name' in df_engr_tech.columns:
                 df_engr_tech = df_engr_tech.dropna(subset=['Name'], how='all')
                 df_engr_tech = df_engr_tech[df_engr_tech['Name'].notna()]
                 df_engr_tech = df_engr_tech[df_engr_tech['Name'].astype(str).str.strip() != '']
             
-            # Fill NaN values
+            # Fill NaN values in Company and ID No with empty strings
             if 'Company' in df_engr_tech.columns:
                 df_engr_tech['Company'] = df_engr_tech['Company'].fillna('').astype(str)
             else:
@@ -197,9 +254,10 @@ def load_databases():
             else:
                 df_engr_tech['ID No'] = ''
             
-            # Handle Region column (new column D)
+            # Handle Region column (Column D - LUZ, VIS, MIN)
             if 'Region' in df_engr_tech.columns:
                 df_engr_tech['Region'] = df_engr_tech['Region'].fillna('').astype(str).str.upper().str.strip()
+                df_engr_tech['Region'] = df_engr_tech['Region'].apply(lambda x: x if x in ['LUZ', 'VIS', 'MIN'] else '')
             else:
                 df_engr_tech['Region'] = ''
                 
@@ -224,9 +282,11 @@ def create_raawa_file(matching_sites, personnel_list, scope_of_work, start_date,
     ws["D3"].value = req_profile["name"]
     ws["D4"].value = req_profile["dept"]
     
+    # Format ID as integer without decimal
     id_value = format_id_number(req_profile["id"])
     ws["G4"].value = id_value
     
+    # Format contact number with leading 0
     contact_value = format_contact_number(req_profile["contact"])
     ws["J4"].value = contact_value
     
@@ -249,40 +309,51 @@ def create_raawa_file(matching_sites, personnel_list, scope_of_work, start_date,
     # --- WRITE PERSONNEL WITH DYNAMIC FONT SIZES ---
     start_personnel_row = 19
     
+    # Function to calculate font size based on text length
     def get_font_size(text, min_size=6, max_size=10):
+        """Calculate appropriate font size based on text length"""
         if not text or text == '':
             return max_size
         text_length = len(str(text))
         if text_length <= 12:
-            return max_size
+            return max_size  # 10
         elif text_length <= 18:
-            return max_size - 1
+            return max_size - 1  # 9
         elif text_length <= 25:
-            return max_size - 2
+            return max_size - 2  # 8
         elif text_length <= 32:
-            return max_size - 3
+            return max_size - 3  # 7
         elif text_length <= 40:
-            return max_size - 4
+            return max_size - 4  # 6
         else:
-            return min_size
+            return min_size  # 6
     
     for idx, person in enumerate(personnel_list):
         row_index = start_personnel_row + (idx // 2)
         col_offset = 0 if idx % 2 == 0 else 5
         
+        # Format ID number for personnel
         formatted_id = format_id_number(person["id_no"])
         
+        # Calculate font sizes for each cell
+        name_font_size = get_font_size(person["name"])
+        company_font_size = get_font_size(person["company"])
+        id_font_size = get_font_size(formatted_id)
+        
+        # Name cell
         name_cell = ws.cell(row=row_index, column=1+col_offset)
         name_cell.value = person["name"]
-        name_cell.font = Font(name="Calibri", size=get_font_size(person["name"]))
+        name_cell.font = Font(name="Calibri", size=name_font_size)
         
+        # Company cell
         company_cell = ws.cell(row=row_index, column=4+col_offset)
         company_cell.value = person["company"]
-        company_cell.font = Font(name="Calibri", size=get_font_size(person["company"]))
+        company_cell.font = Font(name="Calibri", size=company_font_size)
         
+        # ID cell (formatted)
         id_cell = ws.cell(row=row_index, column=5+col_offset)
         id_cell.value = formatted_id
-        id_cell.font = Font(name="Calibri", size=get_font_size(formatted_id))
+        id_cell.font = Font(name="Calibri", size=id_font_size)
     
     # Hide unused personnel rows
     for r in range(start_personnel_row + (len(personnel_list)//2 + 1), 39):
@@ -295,30 +366,36 @@ def create_raawa_file(matching_sites, personnel_list, scope_of_work, start_date,
         ws["A41"].value = scope_of_work
     
     # --- SIGNATORY REPLACEMENT ---
+    # Replace the Facility Manager signatory (NEW ENGINEER_AH) - preserve original formatting
     original_signatory = ws["A48"].value
     if original_signatory:
         ws["A48"].value = str(original_signatory).replace("NEW ENGINEER_AH", facility_manager)
     else:
         ws["A48"].value = f"{facility_manager}\nSignature Over Printed Name / Date"
     
-    # --- FINAL CLEANUP ---
+    # --- FINAL CLEANUP - Apply Calibri 6 to all personnel entries ---
+    # Apply Calibri 6 font to all personnel cells to ensure consistency
     for row in range(start_personnel_row, start_personnel_row + (len(personnel_list)//2 + 1)):
         for col in [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]:
             cell = ws.cell(row=row, column=col)
             if cell.value and row >= start_personnel_row:
+                # Only change font size if it's currently larger than 6, otherwise keep as is
                 if cell.font and cell.font.size and cell.font.size > 6:
                     cell.font = Font(name="Calibri", size=6)
                 elif not cell.font:
                     cell.font = Font(name="Calibri", size=6)
     
+    # Ensure header row (row 1) has correct formatting
     header_font = Font(name="Calibri", size=6, bold=False, italic=False)
     for col_idx in range(1, 12):
         ws.cell(row=1, column=col_idx).font = header_font
     
+    # Ensure signatory has underline but keep its size
     sig_font = Font(name="Calibri", size=6, underline="single")
     ws["A48"].font = sig_font
     ws["A50"].font = sig_font
     
+    # Clean up any random formatting in personnel area
     for row in range(start_personnel_row, 39):
         for col in [1, 4, 5, 6, 7, 8, 9, 10, 11]:
             cell = ws.cell(row=row, column=col)
@@ -326,6 +403,7 @@ def create_raawa_file(matching_sites, personnel_list, scope_of_work, start_date,
                 if not cell.font or cell.font.size != 6:
                     cell.font = Font(name="Calibri", size=6)
     
+    # Save to buffer
     buffer = io.BytesIO()
     wb.save(buffer)
     buffer.seek(0)
@@ -342,8 +420,10 @@ def split_sites_by_territory_and_fm(matching_sites):
         territory = combo['territory']
         facility_manager = combo['facility_manager']
         
+        # Convert sites list to DataFrame
         sites_df = pd.DataFrame(sites_list)
         
+        # If more than 10 sites, split into batches of 10
         if len(sites_df) > 10:
             num_batches = math.ceil(len(sites_df) / 10)
             for batch_num in range(num_batches):
@@ -379,9 +459,11 @@ def get_unique_combinations(matching_sites):
         territory = str(row.get("TERRITORY", "")).strip()
         facility_manager = str(row.get("NEW ENGINEER_AH", "")).strip()
         
+        # Clean up N/A or nan values
         if facility_manager in ['N/A', 'nan', '']:
             facility_manager = "Unassigned FM"
         
+        # Create a unique key combining territory and FM
         key = f"{territory}_{facility_manager}"
         
         if key not in combinations:
@@ -451,7 +533,7 @@ def get_requisitioner_for_territory_and_project(territory, project, region):
                 "contact": format_contact_number(req_row.get("Contact No.", "N/A"))
             }
     
-    # Final fallback
+    # Fallback for territory without requisitioner
     return {
         "name": f"Territory {territory} Engineer",
         "dept": f"TERRITORY {territory}",
@@ -478,7 +560,7 @@ st.sidebar.markdown("""
 <div style="text-align: center; padding: 1rem;">
     <small>Version 2.3.0</small><br>
     <small>© 2026 RAAWA Generator</small><br>
-    <small>✨ Project & Region Aware</small>
+    <small>✨ Region Aware (LUZ, VIS, MIN)</small>
 </div>
 """, unsafe_allow_html=True)
 
@@ -491,6 +573,7 @@ if page == "ℹ️ About & Developer":
     </div>
     """, unsafe_allow_html=True)
     
+    # Developer Profile
     col1, col2 = st.columns([1, 2])
     with col1:
         st.markdown("""
@@ -516,6 +599,7 @@ if page == "ℹ️ About & Developer":
         </div>
         """, unsafe_allow_html=True)
     
+    # Advantages Section
     st.markdown("## 🌟 Key Advantages")
     col1, col2, col3 = st.columns(3)
     
@@ -534,16 +618,36 @@ if page == "ℹ️ About & Developer":
             </div>
             """, unsafe_allow_html=True)
     
+    col1, col2, col3 = st.columns(3)
+    advantages2 = [
+        ("🔄 Auto-Routing", "Automatic requisitioner mapping based on territory"),
+        ("📁 Database Integration", "Load personnel from Excel database with search"),
+        ("🔒 Smart Batching", "Auto-splits into multiple RAAWAs when exceeding 10 sites")
+    ]
+    
+    for idx, (title, desc) in enumerate(advantages2):
+        with [col1, col2, col3][idx]:
+            st.markdown(f"""
+            <div class="advantage-box">
+                <h3>{title}</h3>
+                <p>{desc}</p>
+            </div>
+            """, unsafe_allow_html=True)
+    
+    # Features Section
     st.markdown("## ⚡ Features")
     
     features = [
         ("🏗️ Unlimited Sites", "Select any number of sites from database with auto-batching", "✅"),
         ("👥 Personnel Management", "Manual, database, or mixed input modes", "✅"),
-        ("📝 Project & Region Aware", "Filter requisitioners and teams by project/region", "✅"),
+        ("📝 Project & Region Aware", "Filter requisitioners and teams by project/region (LUZ, VIS, MIN)", "✅"),
         ("🏢 Company Filtering", "Select personnel by company with region awareness", "✅"),
         ("📄 Professional Output", "Perfectly formatted Excel with auto font sizing", "✅"),
         ("🔍 Search & Filter", "Quick personnel search from database", "✅"),
         ("💾 Batch Download", "Download multiple RAAWA files at once", "✅"),
+        ("🎨 Clean Interface", "User-friendly with professional design", "✅"),
+        ("📊 Real-time Preview", "See selected sites and personnel before generation", "✅"),
+        ("🔄 Session Management", "Persistent data across navigation", "✅"),
         ("📑 Auto-Batching", "Automatically splits into 10-site batches per signatory group", "✅"),
         ("📅 Flexible Dates", "Choose start date manually or use current date", "✅"),
         ("📞 Auto-Format Contact", "Automatically formats contact numbers to start with 0", "✅"),
@@ -558,6 +662,7 @@ if page == "ℹ️ About & Developer":
         </div>
         """, unsafe_allow_html=True)
     
+    # Tech Stack
     st.markdown("## 🛠️ Technology Stack")
     tech_col1, tech_col2, tech_col3, tech_col4 = st.columns(4)
     
@@ -592,24 +697,37 @@ if page == "ℹ️ About & Developer":
             <p>Excel Generation</p>
         </div>
         """, unsafe_allow_html=True)
+    
+    # Support Section
+    st.markdown("## 📞 Support & Contact")
+    st.markdown("""
+    <div class="info-box">
+        <h3>Need Help?</h3>
+        <p>📧 Email: <a href="mailto:rabanes.johncarlo4@gmail.com">rabanes.johncarlo4@gmail.com</a></p>
+        <p>📱 Phone: 09669343065</p>
+        <p>🏢 Company: Nokia Shanghai Bell</p>
+        <hr>
+        <p><small>For technical support, feature requests, or bug reports, please reach out via email.</small></p>
+    </div>
+    """, unsafe_allow_html=True)
 
 # --- MAIN GENERATOR PAGE ---
 else:
     if df_db is not None and df_req_db is not None:
+        # Professional Header
         st.markdown("""
         <div class="main-header">
             <h1>📄 Automated Multi-Site RAAWA Generator</h1>
             <p>Select any number of sites, populate the personnel manifest, and generate perfectly styled RAAWA forms instantly.<br>
-            <strong>✨ Project & Region Aware - Auto-batches into groups of 10 per signatory</strong></p>
+            <strong>✨ Region Aware (LUZ, VIS, MIN) - Auto-batches into groups of 10 per signatory</strong></p>
         </div>
         """, unsafe_allow_html=True)
         
         # --- STEP 1: PROJECT & REGION SELECTION ---
         st.markdown("## 📋 Step 1: Project & Region Configuration")
         
-        # Get unique projects and regions from requisitioner database
+        # Get unique projects from requisitioner database
         project_list = []
-        region_list = []
         
         if df_req_db is not None and 'Project' in df_req_db.columns:
             project_list = sorted(df_req_db['Project'].dropna().unique())
@@ -617,11 +735,8 @@ else:
         else:
             project_list = ['Default']
         
-        if df_req_db is not None and 'Region' in df_req_db.columns:
-            region_list = sorted(df_req_db['Region'].dropna().unique())
-            region_list = [r for r in region_list if str(r).strip() != '' and str(r).strip() != 'nan']
-        else:
-            region_list = ['MIN', 'VIS', 'LUZ']
+        # Fixed regions: LUZ, VIS, MIN
+        region_options = ['LUZ', 'VIS', 'MIN']
         
         col_project, col_region = st.columns(2)
         
@@ -633,17 +748,23 @@ else:
             )
         
         with col_region:
-            # Get regions from site database or requisitioner
+            # Get regions from site database
             if df_db is not None and 'REGION' in df_db.columns:
                 site_regions = sorted(df_db['REGION'].dropna().unique())
                 site_regions = [r for r in site_regions if str(r).strip() != '']
-                selected_region = st.selectbox(
-                    "Select Region:",
-                    options=site_regions + ['All Regions'],
-                    help="Filter sites by region"
-                )
+                # Filter to only LUZ, VIS, MIN
+                site_regions = [r for r in site_regions if r in ['LUZ', 'VIS', 'MIN']]
+                
+                if not site_regions:
+                    site_regions = ['LUZ', 'VIS', 'MIN']
             else:
-                selected_region = 'All Regions'
+                site_regions = ['LUZ', 'VIS', 'MIN']
+            
+            selected_region = st.selectbox(
+                "Select Region:",
+                options=['All Regions'] + site_regions,
+                help="Filter sites by region (LUZ, VIS, MIN)"
+            )
         
         st.markdown("---")
         
@@ -667,7 +788,7 @@ else:
         matching_sites = filtered_db[filtered_db['PLAID'].isin(selected_plaids)]
         
         if not matching_sites.empty:
-            # Check for conflicts
+            # Check for conflicts using unique combinations
             conflicts = check_conflicts(matching_sites)
             
             if conflicts['territory_conflict']:
@@ -687,9 +808,10 @@ else:
                 use_container_width=True
             )
             
-            # Show detailed breakdown
+            # Show detailed breakdown of how files will be split
             unique_combos = get_unique_combinations(matching_sites)
             
+            # Calculate total files including batching
             total_files = 0
             batch_details = []
             for combo in unique_combos.values():
@@ -705,6 +827,7 @@ else:
             
             st.info(f"📋 **Generation Plan:** The system will create **{total_files} separate RAAWA files**")
             
+            # Display detailed breakdown
             with st.expander("📊 View Detailed RAAWA Breakdown"):
                 for detail in batch_details:
                     if detail['files'] > 1:
@@ -736,6 +859,7 @@ else:
                 height=100
             )
         with date_col:
+            # Date selection options
             date_option = st.radio(
                 "Date Selection Method:",
                 ["Use Current Date", "Manual Date Entry"],
@@ -749,20 +873,25 @@ else:
                 start_date = st.date_input(
                     "Select Start Date:",
                     value=datetime.now().date(),
-                    min_value=datetime.now().date()
+                    min_value=datetime.now().date(),
+                    help="Choose the effective start date for the authorization"
                 )
                 start_date = datetime.combine(start_date, datetime.min.time())
                 st.caption(f"Selected Start Date: **{start_date.strftime('%Y-%m-%d')}**")
             
+            # Validity period
             validity_days = st.number_input(
                 "Authorization Validity (Days):", 
                 min_value=1, 
                 max_value=365, 
-                value=30
+                value=30,
+                help="Number of days the authorization will be valid from the start date"
             )
             
+            # Calculate end date
             end_date = start_date + timedelta(days=int(validity_days))
             
+            # Display coverage
             st.success(f"📅 Form window coverage: **{start_date.strftime('%Y-%m-%d')}** to **{end_date.strftime('%Y-%m-%d')}**")
             st.caption(f"Total validity: {validity_days} days")
 
@@ -778,6 +907,7 @@ else:
                 horizontal=True
             )
         
+        # Initialize personnel list in session state if not exists
         if 'personnel_list' not in st.session_state:
             st.session_state.personnel_list = []
         
@@ -785,6 +915,7 @@ else:
             if df_engr_tech_db is not None and not df_engr_tech_db.empty:
                 st.success(f"📋 Found {len(df_engr_tech_db)} personnel records in database")
                 
+                # Display database records for selection
                 with st.expander("📁 Select Personnel from Database", expanded=True):
                     # Company filter
                     company_list = sorted(df_engr_tech_db['Company'].unique())
@@ -801,7 +932,7 @@ else:
                     
                     with col_region_filter:
                         if 'Region' in df_engr_tech_db.columns:
-                            region_filter_options = ['All Regions'] + sorted(df_engr_tech_db['Region'].unique())
+                            region_filter_options = ['All Regions', 'LUZ', 'VIS', 'MIN']
                             selected_region_filter = st.selectbox(
                                 "Filter by Region:",
                                 options=region_filter_options
@@ -818,7 +949,7 @@ else:
                     if selected_region_filter != 'All Regions' and 'Region' in filtered_engr.columns:
                         filtered_engr = filtered_engr[filtered_engr['Region'].str.upper() == selected_region_filter.upper()]
                     
-                    # Search filter
+                    # Search/filter functionality
                     search_term = st.text_input("🔍 Search by Name, Company, or ID:", key="personnel_search")
                     
                     if search_term:
@@ -832,16 +963,18 @@ else:
                     if len(filtered_engr) < len(df_engr_tech_db):
                         st.info(f"Showing {len(filtered_engr)} of {len(df_engr_tech_db)} personnel")
                     
+                    # Multi-select for personnel
                     selected_indices = st.multiselect(
                         "Select Engineers/Technicians to add:",
                         options=filtered_engr.index.tolist(),
                         format_func=lambda x: f"{filtered_engr.loc[x, 'Name']} - {filtered_engr.loc[x, 'Company']} (ID: {filtered_engr.loc[x, 'ID No']})",
-                        key="selected_personnel_db_v2"
+                        key="selected_personnel_db"
                     )
                     
                     if st.button("➕ Add Selected Personnel to Manifest"):
                         for idx in selected_indices:
                             person = filtered_engr.loc[idx]
+                            # Check for duplicates
                             if not any(p['name'] == person['Name'] for p in st.session_state.personnel_list):
                                 st.session_state.personnel_list.append({
                                     "name": person['Name'],
@@ -851,19 +984,20 @@ else:
                         st.success(f"Added {len(selected_indices)} personnel to manifest!")
                         st.rerun()
                 
-                # Manual addition option
+                # Manual addition option within database mode
                 st.markdown("---")
                 st.subheader("Or Add Manually")
                 
+                # Manual input fields in database mode
                 col1, col2, col3 = st.columns(3)
                 with col1:
-                    manual_name = st.text_input("Name:", key="manual_name_db_v2")
+                    manual_name = st.text_input("Name:", key="manual_name_db")
                 with col2:
-                    manual_company = st.text_input("Company:", key="manual_company_db_v2")
+                    manual_company = st.text_input("Company:", key="manual_company_db")
                 with col3:
-                    manual_id = st.text_input("ID No.:", key="manual_id_db_v2")
+                    manual_id = st.text_input("ID No.:", key="manual_id_db")
                 
-                if st.button("➕ Add Manual Entry", key="add_manual_db_v2"):
+                if st.button("➕ Add Manual Entry", key="add_manual_db"):
                     if manual_name:
                         st.session_state.personnel_list.append({
                             "name": manual_name,
@@ -878,6 +1012,7 @@ else:
                 selection_method = "Manual Input"
         
         if selection_method == "Manual Input":
+            # Track visibility dynamically up to 40 entries
             for i in range(1, 41):
                 if f"p_show_{i}" not in st.session_state:
                     st.session_state[f"p_show_{i}"] = True if i <= 4 else False
@@ -888,18 +1023,19 @@ else:
                 if st.session_state[f"p_show_{i}"]:
                     p_col1, p_col2, p_col3 = st.columns([2, 2, 2])
                     with p_col1:
-                        p_name = st.text_input(f"Personnel Name {i}", key=f"name_{i}_v2")
+                        p_name = st.text_input(f"Personnel Name {i}", key=f"name_{i}")
                     with p_col2:
-                        p_comp = st.text_input(f"Company/Vendor {i}", key=f"comp_{i}_v2")
+                        p_comp = st.text_input(f"Company/Vendor {i}", key=f"comp_{i}")
                     with p_col3:
-                        p_id = st.text_input(f"Security ID No. {i}", key=f"id_{i}_v2")
+                        p_id = st.text_input(f"Security ID No. {i}", key=f"id_{i}")
                         
                     if p_name: 
+                        # Check if already added to avoid duplicates
                         if not any(p['name'] == p_name for p in st.session_state.personnel_list):
                             st.session_state.personnel_list.append({"name": p_name, "company": p_comp, "id_no": p_id})
 
             if visible_count < 40:
-                if st.button("➕ Add More Personnel Fields", key="add_more_fields_v2"):
+                if st.button("➕ Add More Personnel Fields", key="add_more_fields"):
                     for i in range(1, 41):
                         if not st.session_state[f"p_show_{i}"]:
                             st.session_state[f"p_show_{i}"] = True
@@ -908,6 +1044,7 @@ else:
         if selection_method == "Mixed (Database + Manual)":
             st.subheader("Database Selection")
             if df_engr_tech_db is not None and not df_engr_tech_db.empty:
+                # Database selection section
                 with st.expander("📁 Select from Database", expanded=True):
                     # Company filter
                     company_list = sorted(df_engr_tech_db['Company'].unique())
@@ -925,7 +1062,7 @@ else:
                     
                     with col_region_filter:
                         if 'Region' in df_engr_tech_db.columns:
-                            region_filter_options = ['All Regions'] + sorted(df_engr_tech_db['Region'].unique())
+                            region_filter_options = ['All Regions', 'LUZ', 'VIS', 'MIN']
                             selected_region_filter = st.selectbox(
                                 "Filter by Region:",
                                 options=region_filter_options,
@@ -942,7 +1079,7 @@ else:
                     if selected_region_filter != 'All Regions' and 'Region' in filtered_engr.columns:
                         filtered_engr = filtered_engr[filtered_engr['Region'].str.upper() == selected_region_filter.upper()]
                     
-                    search_term = st.text_input("🔍 Search:", key="mixed_search_v2")
+                    search_term = st.text_input("🔍 Search:", key="mixed_search")
                     
                     if search_term:
                         filtered_engr = filtered_engr[
@@ -955,10 +1092,10 @@ else:
                         "Select personnel:",
                         options=filtered_engr.index.tolist(),
                         format_func=lambda x: f"{filtered_engr.loc[x, 'Name']} - {filtered_engr.loc[x, 'Company']}",
-                        key="mixed_selection_v2"
+                        key="mixed_selection"
                     )
                     
-                    if st.button("➕ Add Selected", key="add_mixed_v2"):
+                    if st.button("➕ Add Selected", key="add_mixed"):
                         for idx in selected_indices:
                             person = filtered_engr.loc[idx]
                             if not any(p['name'] == person['Name'] for p in st.session_state.personnel_list):
@@ -973,15 +1110,16 @@ else:
             st.markdown("---")
             st.subheader("Manual Addition")
             
+            # Manual input fields
             col1, col2, col3 = st.columns(3)
             with col1:
-                manual_name = st.text_input("Name:", key="manual_name_mixed_v2")
+                manual_name = st.text_input("Name:", key="manual_name_mixed")
             with col2:
-                manual_company = st.text_input("Company:", key="manual_company_mixed_v2")
+                manual_company = st.text_input("Company:", key="manual_company_mixed")
             with col3:
-                manual_id = st.text_input("ID No.:", key="manual_id_mixed_v2")
+                manual_id = st.text_input("ID No.:", key="manual_id_mixed")
             
-            if st.button("➕ Add Manual Entry", key="add_manual_mixed_v2"):
+            if st.button("➕ Add Manual Entry", key="add_manual_mixed"):
                 if manual_name:
                     st.session_state.personnel_list.append({
                         "name": manual_name,
@@ -996,10 +1134,12 @@ else:
             st.markdown("---")
             st.markdown(f"### 📋 Current Team Manifest ({len(st.session_state.personnel_list)} personnel)")
             
+            # Create a dataframe for display with formatted IDs
             manifest_df = pd.DataFrame(st.session_state.personnel_list)
             manifest_df['id_no'] = manifest_df['id_no'].apply(format_id_number)
             st.dataframe(manifest_df, hide_index=True, use_container_width=True)
             
+            # Option to clear manifest
             if st.button("🗑️ Clear All Personnel"):
                 st.session_state.personnel_list = []
                 st.rerun()
@@ -1014,11 +1154,13 @@ else:
                 st.warning("Please add at least one personnel entry to populate the work manifest.")
             else:
                 try:
+                    # Split sites by territory, facility manager, and batch size
                     site_groups = split_sites_by_territory_and_fm(matching_sites)
                     
                     total_groups = len(site_groups)
                     st.info(f"📋 Generating **{total_groups} RAAWA files**...")
                     
+                    # Create RAAWA files for each group
                     file_details = []
                     
                     for group_info in site_groups:
@@ -1028,13 +1170,20 @@ else:
                         batch_num = group_info['batch_num']
                         total_batches = group_info['total_batches']
                         
+                        # Determine region for this group
+                        group_region = selected_region
+                        if selected_region == 'All Regions':
+                            group_region = group_sites.iloc[0].get('REGION', 'MIN')
+                            group_region = group_region if group_region in ['LUZ', 'VIS', 'MIN'] else 'MIN'
+                        
                         # Get requisitioner with project and region
                         req_profile = get_requisitioner_for_territory_and_project(
                             territory, 
                             selected_project, 
-                            selected_region
+                            group_region
                         )
                         
+                        # Create the RAAWA file
                         buffer = create_raawa_file(
                             group_sites, 
                             st.session_state.personnel_list, 
@@ -1047,13 +1196,14 @@ else:
                             total_batches
                         )
                         
+                        # Generate clean filename
                         clean_fm = facility_manager.replace(" ", "_").replace("/", "_").replace(",", "")
                         if total_batches > 1:
-                            filename = f"RAAWA_{selected_project}_{selected_region}_Territory{territory}_{clean_fm}_Batch{batch_num}of{total_batches}_{group_sites.iloc[0]['PLAID']}.xlsx"
-                            display_name = f"{selected_project} - {selected_region} - Territory {territory} - {facility_manager[:25]} (Batch {batch_num}/{total_batches})"
+                            filename = f"RAAWA_{selected_project}_{group_region}_Territory{territory}_{clean_fm}_Batch{batch_num}of{total_batches}_{group_sites.iloc[0]['PLAID']}.xlsx"
+                            display_name = f"{selected_project} - {group_region} - Territory {territory} - {facility_manager[:25]} (Batch {batch_num}/{total_batches})"
                         else:
-                            filename = f"RAAWA_{selected_project}_{selected_region}_Territory{territory}_{clean_fm}_{group_sites.iloc[0]['PLAID']}.xlsx"
-                            display_name = f"{selected_project} - {selected_region} - Territory {territory} - {facility_manager[:30]}"
+                            filename = f"RAAWA_{selected_project}_{group_region}_Territory{territory}_{clean_fm}_{group_sites.iloc[0]['PLAID']}.xlsx"
+                            display_name = f"{selected_project} - {group_region} - Territory {territory} - {facility_manager[:30]}"
                         
                         file_details.append({
                             "name": filename,
@@ -1066,8 +1216,9 @@ else:
                             "batch_info": f" (Batch {batch_num}/{total_batches})" if total_batches > 1 else ""
                         })
                         
-                        st.success(f"✅ Created RAAWA #{len(file_details)}: {selected_project} - {selected_region} - Territory {territory} - {facility_manager[:40]} ({len(group_sites)} sites){' - Batch ' + str(batch_num) + '/' + str(total_batches) if total_batches > 1 else ''} | Requisitioner: {req_profile['name']}")
+                        st.success(f"✅ Created RAAWA #{len(file_details)}: {selected_project} - {group_region} - Territory {territory} - {facility_manager[:40]} ({len(group_sites)} sites){' - Batch ' + str(batch_num) + '/' + str(total_batches) if total_batches > 1 else ''} | Requisitioner: {req_profile['name']}")
                     
+                    # Store in session state for persistent access
                     st.session_state['generated_files'] = file_details
                     st.session_state['files_generated'] = True
                     st.rerun()
@@ -1075,7 +1226,7 @@ else:
                 except Exception as ex:
                     st.error(f"Error: {ex}")
         
-        # --- DISPLAY DOWNLOAD BUTTONS ---
+        # --- DISPLAY DOWNLOAD BUTTONS FOR GENERATED FILES ---
         if st.session_state.get('files_generated', False):
             st.markdown("---")
             st.markdown("## 📥 Download Generated RAAWA Files")
@@ -1083,6 +1234,7 @@ else:
             file_details = st.session_state.get('generated_files', [])
             
             if len(file_details) == 1:
+                # Single file download
                 st.success(f"🎉 Successfully generated 1 RAAWA file!")
                 file_info = file_details[0]
                 
@@ -1093,7 +1245,7 @@ else:
                         data=file_info['buffer'],
                         file_name=file_info['name'],
                         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                        key="single_download_v2",
+                        key="single_download",
                         use_container_width=True
                     )
                 with col2:
@@ -1102,19 +1254,21 @@ else:
                 st.markdown(f"""
                 **Details:**
                 - 📋 **Project:** {selected_project}
-                - 🌍 **Region:** {selected_region}
+                - 🌍 **Region:** {selected_region if selected_region != 'All Regions' else file_info.get('region', 'MIN')}
                 - 🏢 **Facility Manager:** {file_info['facility_manager']}
                 - 👤 **Requisitioner:** {file_info['requisitioner']}
                 - 📍 **Territory:** {file_info['territory']}
                 """)
                 
             else:
+                # Multiple files download
                 st.success(f"🎉 Successfully generated {len(file_details)} RAAWA files!")
-                st.markdown(f"**Project:** {selected_project} | **Region:** {selected_region}")
+                st.markdown(f"**Project:** {selected_project} | **Region:** {selected_region if selected_region != 'All Regions' else 'Multiple'}")
                 
+                # Create expandable section for better organization
                 with st.expander("📁 View All Generated Files", expanded=True):
                     for idx, file_info in enumerate(file_details):
-                        st.markdown(f"**File #{idx + 1}: {selected_project} - {selected_region} - Territory {file_info['territory']}{file_info['batch_info']}**")
+                        st.markdown(f"**File #{idx + 1}: {selected_project} - {selected_region if selected_region != 'All Regions' else 'Multiple'} - Territory {file_info['territory']}{file_info['batch_info']}**")
                         
                         col1, col2, col3 = st.columns([2, 1.5, 1.5])
                         
@@ -1124,7 +1278,7 @@ else:
                                 data=file_info['buffer'],
                                 file_name=file_info['name'],
                                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                                key=f"download_v2_{idx}_{file_info['territory']}_{file_info['facility_manager'][:20]}",
+                                key=f"download_{idx}_{file_info['territory']}_{file_info['facility_manager'][:20]}",
                                 use_container_width=True
                             )
                         
@@ -1138,6 +1292,7 @@ else:
                         
                         st.markdown("---")
             
+            # Add option to clear and start over
             col_clear, col_spacer = st.columns([1, 3])
             with col_clear:
                 if st.button("🔄 Clear Files & Start New RAAWA", use_container_width=True):
