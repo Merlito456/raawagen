@@ -802,8 +802,7 @@ else:
             selection_method = st.radio(
                 "Personnel Selection Method:",
                 ["Manual Input", "Load from Database", "Mixed (Database + Manual)"],
-                horizontal=True
-            )
+                horizontal=True            )
         
         if 'personnel_list' not in st.session_state:
             st.session_state.personnel_list = []
@@ -902,7 +901,7 @@ else:
                             use_container_width=True
                         )
                         
-                        # Multi-select with filtered data
+                        # Multi-select with filtered data - using index values
                         selected_indices = st.multiselect(
                             "Select Engineers/Technicians to add:",
                             options=filtered_engr.index.tolist(),
