@@ -5,6 +5,17 @@ from openpyxl.styles import Font, Alignment
 import io
 from datetime import datetime, timedelta
 import math
+import gc
+import os
+import sys
+
+# --- MEMORY OPTIMIZATION ---
+pd.options.mode.chained_assignment = None
+pd.set_option('display.max_columns', None)
+pd.set_option('display.max_rows', 100)
+
+# Force garbage collection at startup
+gc.collect()
 
 # --- PAGE CONFIGURATION ---
 st.set_page_config(
@@ -78,6 +89,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+# --- UTILITY FUNCTIONS ---
 def format_contact_number(contact):
     """Format contact number to start with 0 and have 11 digits"""
     if not contact or pd.isna(contact) or contact == 'N/A':
@@ -122,12 +134,38 @@ def format_id_number(id_num):
     except:
         return id_str
 
+# --- FILE CHECK ---
+def check_required_files():
+    """Check if all required Excel files exist"""
+    required_files = [
+        "Globe FO Engr Conatct_Vendor.xlsx",
+        "Requisitioner.xlsx",
+        "EngrTech.xlsx",
+        "MIN591__MANUAL RAAWA_APPLICATION_June8,2026.xlsx"
+    ]
+    
+    missing_files = []
+    for file in required_files:
+        if not os.path.exists(file):
+            missing_files.append(file)
+    
+    if missing_files:
+        st.error(f"❌ Missing required files: {', '.join(missing_files)}")
+        st.info("Please upload all required Excel files to the app directory.")
+        return False
+    return True
+
 # --- DATABASE LOADING ---
 @st.cache_data
 def load_databases():
     try:
-        # Load Main Site Database
-        df_sites = pd.read_excel("Globe FO Engr Conatct_Vendor.xlsx", sheet_name="MIN")
+        # Load Main Site Database with memory optimization
+        df_sites = pd.read_excel(
+            "Globe FO Engr Conatct_Vendor.xlsx", 
+            sheet_name="MIN",
+            dtype=str
+        )
+        
         df_sites['PLAID'] = df_sites['PLAID'].astype(str).str.strip()
         df_sites['TERRITORY'] = df_sites['TERRITORY'].astype(str).str.replace('Territory', '', case=False).str.strip()
         
@@ -135,8 +173,12 @@ def load_databases():
             df_sites['REGION'] = df_sites['REGION'].astype(str).str.upper().str.strip()
             df_sites['REGION'] = df_sites['REGION'].apply(lambda x: x if x in ['LUZ', 'VIS', 'MIN'] else 'MIN')
         
-        # Load Requisitioner Database
-        df_req = pd.read_excel("Requisitioner.xlsx", header=1, dtype=str)
+        # Load Requisitioner Database with memory optimization
+        df_req = pd.read_excel(
+            "Requisitioner.xlsx", 
+            header=1, 
+            dtype=str
+        )
         df_req.columns = df_req.columns.str.strip()
         
         if 'Territory no.' in df_req.columns:
@@ -146,29 +188,26 @@ def load_databases():
             df_req['Region'] = df_req['Region'].astype(str).str.upper().str.strip()
             df_req['Region'] = df_req['Region'].apply(lambda x: x if x in ['LUZ', 'VIS', 'MIN'] else 'MIN')
         
-        # Clean up Project column - strip whitespace
         if 'Project' in df_req.columns:
             df_req['Project'] = df_req['Project'].astype(str).str.strip()
         
-        for idx, row in df_req.iterrows():
-            if 'ID #' in df_req.columns:
-                id_value = row.get('ID #', 'N/A')
-                if pd.isna(id_value):
-                    id_value = 'N/A'
-                df_req.at[idx, 'ID #'] = format_id_number(id_value)
-            
-            if 'Contact No.' in df_req.columns:
-                contact_value = row.get('Contact No.', 'N/A')
-                if pd.isna(contact_value):
-                    contact_value = 'N/A'
-                df_req.at[idx, 'Contact No.'] = format_contact_number(contact_value)
+        # Batch process formatting for speed
+        if 'ID #' in df_req.columns:
+            df_req['ID #'] = df_req['ID #'].apply(lambda x: format_id_number(x) if pd.notna(x) else 'N/A')
         
-        # Load Engineer/Technician Database - headers are in row 2 (index 1)
+        if 'Contact No.' in df_req.columns:
+            df_req['Contact No.'] = df_req['Contact No.'].apply(lambda x: format_contact_number(x) if pd.notna(x) else 'N/A')
+        
+        # Load Engineer/Technician Database
         try:
-            df_engr_tech = pd.read_excel("EngrTech.xlsx", header=1, dtype=str)
+            df_engr_tech = pd.read_excel(
+                "EngrTech.xlsx", 
+                header=1, 
+                dtype=str
+            )
             df_engr_tech.columns = df_engr_tech.columns.str.strip()
             
-            # Map columns
+            # Column mapping
             if 'SEC ID' in df_engr_tech.columns:
                 df_engr_tech.rename(columns={'SEC ID': 'ID No'}, inplace=True)
             elif 'ID No' not in df_engr_tech.columns:
@@ -189,149 +228,160 @@ def load_databases():
             if 'ID No' in df_engr_tech.columns:
                 df_engr_tech['ID No'] = df_engr_tech['ID No'].astype(str).apply(format_id_number)
             
-            # Drop empty rows
+            # Clean up
             if 'Name' in df_engr_tech.columns:
                 df_engr_tech = df_engr_tech.dropna(subset=['Name'], how='all')
                 df_engr_tech = df_engr_tech[df_engr_tech['Name'].notna()]
                 df_engr_tech = df_engr_tech[df_engr_tech['Name'].astype(str).str.strip() != '']
             
             # Fill NaN values
-            if 'Company' in df_engr_tech.columns:
-                df_engr_tech['Company'] = df_engr_tech['Company'].fillna('').astype(str)
-            else:
-                df_engr_tech['Company'] = ''
-                
-            if 'ID No' in df_engr_tech.columns:
-                df_engr_tech['ID No'] = df_engr_tech['ID No'].fillna('').astype(str)
-            else:
-                df_engr_tech['ID No'] = ''
+            for col in ['Company', 'ID No', 'Region']:
+                if col in df_engr_tech.columns:
+                    df_engr_tech[col] = df_engr_tech[col].fillna('').astype(str)
+                else:
+                    df_engr_tech[col] = ''
             
-            # Handle Region column
+            # Clean Region
             if 'Region' in df_engr_tech.columns:
-                df_engr_tech['Region'] = df_engr_tech['Region'].fillna('').astype(str).str.upper().str.strip()
+                df_engr_tech['Region'] = df_engr_tech['Region'].str.upper().str.strip()
                 df_engr_tech['Region'] = df_engr_tech['Region'].apply(lambda x: x if x in ['LUZ', 'VIS', 'MIN'] else '')
-            else:
-                df_engr_tech['Region'] = ''
                 
         except Exception as e:
             st.warning(f"EngrTech.xlsx error: {e}")
             df_engr_tech = pd.DataFrame(columns=['Name', 'Company', 'ID No', 'Region'])
         
+        # Force garbage collection
+        gc.collect()
+        
         return df_sites, df_req, df_engr_tech
+        
     except Exception as e:
         st.error(f"Error loading database files: {str(e)}")
         import traceback
         st.error(traceback.format_exc())
         return None, None, None
 
+# --- RAAWA FILE CREATION ---
 def create_raawa_file(matching_sites, personnel_list, scope_of_work, start_date, end_date, req_profile, facility_manager, batch_num=1, total_batches=1):
     """Helper function to create a single RAAWA file with dynamic font sizing"""
-    template_file = "MIN591__MANUAL RAAWA_APPLICATION_June8,2026.xlsx"
-    wb = openpyxl.load_workbook(template_file)
-    ws = wb.active 
-    
-    ws["D3"].value = req_profile["name"]
-    ws["D4"].value = req_profile["dept"]
-    
-    id_value = format_id_number(req_profile["id"])
-    ws["G4"].value = id_value
-    
-    contact_value = format_contact_number(req_profile["contact"])
-    ws["J4"].value = contact_value
-    
-    base_site_row = 6
-    num_sites = len(matching_sites)
-    for idx, (_, row) in enumerate(matching_sites.iterrows()):
-        curr_row = base_site_row + idx
-        ws.cell(row=curr_row, column=1, value=f"{row.get('PLAID', '')} - {row.get('SITE', '')}")
-        ws.cell(row=curr_row, column=4, value=row.get("SITE_ADD", "N/A"))
-    
-    for r in range(base_site_row + num_sites, 16):
-        ws.row_dimensions[r].hidden = True
-    
-    ws["D17"].value = start_date.strftime("%Y-%m-%d")
-    ws["E17"].value = end_date.strftime("%Y-%m-%d")
-    
-    start_personnel_row = 19
-    
-    def get_font_size(text, min_size=6, max_size=10):
-        if not text or text == '':
-            return max_size
-        text_length = len(str(text))
-        if text_length <= 12:
-            return max_size
-        elif text_length <= 18:
-            return max_size - 1
-        elif text_length <= 25:
-            return max_size - 2
-        elif text_length <= 32:
-            return max_size - 3
-        elif text_length <= 40:
-            return max_size - 4
+    try:
+        template_file = "MIN591__MANUAL RAAWA_APPLICATION_June8,2026.xlsx"
+        wb = openpyxl.load_workbook(template_file)
+        ws = wb.active 
+        
+        ws["D3"].value = req_profile["name"]
+        ws["D4"].value = req_profile["dept"]
+        
+        id_value = format_id_number(req_profile["id"])
+        ws["G4"].value = id_value
+        
+        contact_value = format_contact_number(req_profile["contact"])
+        ws["J4"].value = contact_value
+        
+        base_site_row = 6
+        num_sites = len(matching_sites)
+        for idx, (_, row) in enumerate(matching_sites.iterrows()):
+            curr_row = base_site_row + idx
+            ws.cell(row=curr_row, column=1, value=f"{row.get('PLAID', '')} - {row.get('SITE', '')}")
+            ws.cell(row=curr_row, column=4, value=row.get("SITE_ADD", "N/A"))
+        
+        for r in range(base_site_row + num_sites, 16):
+            ws.row_dimensions[r].hidden = True
+        
+        ws["D17"].value = start_date.strftime("%Y-%m-%d")
+        ws["E17"].value = end_date.strftime("%Y-%m-%d")
+        
+        start_personnel_row = 19
+        
+        def get_font_size(text, min_size=6, max_size=10):
+            if not text or text == '':
+                return max_size
+            text_length = len(str(text))
+            if text_length <= 12:
+                return max_size
+            elif text_length <= 18:
+                return max_size - 1
+            elif text_length <= 25:
+                return max_size - 2
+            elif text_length <= 32:
+                return max_size - 3
+            elif text_length <= 40:
+                return max_size - 4
+            else:
+                return min_size
+        
+        for idx, person in enumerate(personnel_list):
+            row_index = start_personnel_row + (idx // 2)
+            col_offset = 0 if idx % 2 == 0 else 5
+            
+            formatted_id = format_id_number(person["id_no"])
+            
+            name_cell = ws.cell(row=row_index, column=1+col_offset)
+            name_cell.value = person["name"]
+            name_cell.font = Font(name="Calibri", size=get_font_size(person["name"]))
+            
+            company_cell = ws.cell(row=row_index, column=4+col_offset)
+            company_cell.value = person["company"]
+            company_cell.font = Font(name="Calibri", size=get_font_size(person["company"]))
+            
+            id_cell = ws.cell(row=row_index, column=5+col_offset)
+            id_cell.value = formatted_id
+            id_cell.font = Font(name="Calibri", size=get_font_size(formatted_id))
+        
+        for r in range(start_personnel_row + (len(personnel_list)//2 + 1), 39):
+            ws.row_dimensions[r].hidden = True
+        
+        if total_batches > 1:
+            ws["A41"].value = f"{scope_of_work}\n\n(Page {batch_num} of {total_batches} for this location group)"
         else:
-            return min_size
-    
-    for idx, person in enumerate(personnel_list):
-        row_index = start_personnel_row + (idx // 2)
-        col_offset = 0 if idx % 2 == 0 else 5
+            ws["A41"].value = scope_of_work
         
-        formatted_id = format_id_number(person["id_no"])
+        original_signatory = ws["A48"].value
+        if original_signatory:
+            ws["A48"].value = str(original_signatory).replace("NEW ENGINEER_AH", facility_manager)
+        else:
+            ws["A48"].value = f"{facility_manager}\nSignature Over Printed Name / Date"
         
-        name_cell = ws.cell(row=row_index, column=1+col_offset)
-        name_cell.value = person["name"]
-        name_cell.font = Font(name="Calibri", size=get_font_size(person["name"]))
+        # Apply consistent font sizing
+        for row in range(start_personnel_row, start_personnel_row + (len(personnel_list)//2 + 1)):
+            for col in [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]:
+                cell = ws.cell(row=row, column=col)
+                if cell.value and row >= start_personnel_row:
+                    if cell.font and cell.font.size and cell.font.size > 6:
+                        cell.font = Font(name="Calibri", size=6)
+                    elif not cell.font:
+                        cell.font = Font(name="Calibri", size=6)
         
-        company_cell = ws.cell(row=row_index, column=4+col_offset)
-        company_cell.value = person["company"]
-        company_cell.font = Font(name="Calibri", size=get_font_size(person["company"]))
+        header_font = Font(name="Calibri", size=6, bold=False, italic=False)
+        for col_idx in range(1, 12):
+            ws.cell(row=1, column=col_idx).font = header_font
         
-        id_cell = ws.cell(row=row_index, column=5+col_offset)
-        id_cell.value = formatted_id
-        id_cell.font = Font(name="Calibri", size=get_font_size(formatted_id))
-    
-    for r in range(start_personnel_row + (len(personnel_list)//2 + 1), 39):
-        ws.row_dimensions[r].hidden = True
-    
-    if total_batches > 1:
-        ws["A41"].value = f"{scope_of_work}\n\n(Page {batch_num} of {total_batches} for this location group)"
-    else:
-        ws["A41"].value = scope_of_work
-    
-    original_signatory = ws["A48"].value
-    if original_signatory:
-        ws["A48"].value = str(original_signatory).replace("NEW ENGINEER_AH", facility_manager)
-    else:
-        ws["A48"].value = f"{facility_manager}\nSignature Over Printed Name / Date"
-    
-    for row in range(start_personnel_row, start_personnel_row + (len(personnel_list)//2 + 1)):
-        for col in [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]:
-            cell = ws.cell(row=row, column=col)
-            if cell.value and row >= start_personnel_row:
-                if cell.font and cell.font.size and cell.font.size > 6:
-                    cell.font = Font(name="Calibri", size=6)
-                elif not cell.font:
-                    cell.font = Font(name="Calibri", size=6)
-    
-    header_font = Font(name="Calibri", size=6, bold=False, italic=False)
-    for col_idx in range(1, 12):
-        ws.cell(row=1, column=col_idx).font = header_font
-    
-    sig_font = Font(name="Calibri", size=6, underline="single")
-    ws["A48"].font = sig_font
-    ws["A50"].font = sig_font
-    
-    for row in range(start_personnel_row, 39):
-        for col in [1, 4, 5, 6, 7, 8, 9, 10, 11]:
-            cell = ws.cell(row=row, column=col)
-            if cell.value and row >= start_personnel_row:
-                if not cell.font or cell.font.size != 6:
-                    cell.font = Font(name="Calibri", size=6)
-    
-    buffer = io.BytesIO()
-    wb.save(buffer)
-    buffer.seek(0)
-    return buffer
+        sig_font = Font(name="Calibri", size=6, underline="single")
+        ws["A48"].font = sig_font
+        ws["A50"].font = sig_font
+        
+        for row in range(start_personnel_row, 39):
+            for col in [1, 4, 5, 6, 7, 8, 9, 10, 11]:
+                cell = ws.cell(row=row, column=col)
+                if cell.value and row >= start_personnel_row:
+                    if not cell.font or cell.font.size != 6:
+                        cell.font = Font(name="Calibri", size=6)
+        
+        buffer = io.BytesIO()
+        wb.save(buffer)
+        buffer.seek(0)
+        
+        # Clean up
+        wb.close()
+        gc.collect()
+        
+        return buffer
+        
+    except Exception as e:
+        st.error(f"Error creating RAAWA file: {str(e)}")
+        return None
 
+# --- SITE GROUPING FUNCTIONS ---
 def split_sites_by_territory_and_fm(matching_sites):
     """Split sites by unique combinations of Territory and Facility Manager, then further split if > 10 sites per group"""
     unique_combos = get_unique_combinations(matching_sites)
@@ -413,10 +463,7 @@ def check_conflicts(matching_sites):
         'num_combinations': len(unique_combos)
     }
 
-# --- LOAD DATABASES FIRST ---
-df_db, df_req_db, df_engr_tech_db = load_databases()
-
-# --- REQUISITIONER FUNCTION with Project and Region support ---
+# --- REQUISITIONER FUNCTION ---
 def get_requisitioner_for_territory_and_project(territory, project, region):
     """Get requisitioner profile based on territory, project, and region"""
     if df_req_db is not None and 'Territory no.' in df_req_db.columns:
@@ -436,10 +483,8 @@ def get_requisitioner_for_territory_and_project(territory, project, region):
                 "contact": format_contact_number(req_row.get("Contact No.", "N/A"))
             }
         
-        # If exact match fails, try partial match (project contains the base project name)
-        # This handles cases like "B2C_EUL MIGRATION - MIN - Territory 8" vs "B2C_EUL MIGRATION"
+        # If exact match fails, try partial match
         if project:
-            # Get the base project name (remove region and territory suffixes)
             base_project = project.split(' - ')[0] if ' - ' in project else project
             
             matching_reqs = df_req_db[
@@ -479,6 +524,14 @@ def get_requisitioner_for_territory_and_project(territory, project, region):
         "id": "N/A",
         "contact": "N/A"
     }
+
+# --- MAIN APP ---
+# Check files first
+if not check_required_files():
+    st.stop()
+
+# Load databases
+df_db, df_req_db, df_engr_tech_db = load_databases()
 
 # --- SIDEBAR NAVIGATION ---
 st.sidebar.markdown("""
@@ -1216,6 +1269,10 @@ else:
                             total_batches
                         )
                         
+                        if buffer is None:
+                            st.error(f"Failed to create RAAWA file for Territory {territory}")
+                            continue
+                        
                         clean_fm = facility_manager.replace(" ", "_").replace("/", "_").replace(",", "")
                         if total_batches > 1:
                             filename = f"RAAWA_{selected_project}_{group_region}_Territory{territory}_{clean_fm}_Batch{batch_num}of{total_batches}_{group_sites.iloc[0]['PLAID']}.xlsx"
@@ -1236,6 +1293,9 @@ else:
                         })
                         
                         st.success(f"✅ Created RAAWA #{len(file_details)}: {selected_project} - {group_region} - Territory {territory} - {facility_manager[:40]} ({len(group_sites)} sites){' - Batch ' + str(batch_num) + '/' + str(total_batches) if total_batches > 1 else ''} | Requisitioner: {req_profile['name']}")
+                        
+                        # Force garbage collection after each file
+                        gc.collect()
                     
                     st.session_state['generated_files'] = file_details
                     st.session_state['files_generated'] = True
@@ -1243,6 +1303,8 @@ else:
                         
                 except Exception as ex:
                     st.error(f"Error: {ex}")
+                    import traceback
+                    st.error(traceback.format_exc())
         
         # --- DISPLAY DOWNLOAD BUTTONS FOR GENERATED FILES ---
         if st.session_state.get('files_generated', False):
@@ -1313,6 +1375,7 @@ else:
                     st.session_state['files_generated'] = False
                     st.session_state['generated_files'] = []
                     st.session_state.personnel_list = []
+                    gc.collect()
                     st.rerun()
     else:
         st.error("Failed to load databases. Please check that all required Excel files are present.")
