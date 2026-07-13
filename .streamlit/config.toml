@@ -1,0 +1,14 @@
+[server]
+maxUploadSize = 10
+enableXsrfProtection = false
+enableCORS = false
+headless = true
+
+[browser]
+gatherUsageStats = false
+
+[runner]
+magicEnabled = false
+
+[theme]
+base = "light"
