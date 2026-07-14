@@ -874,11 +874,16 @@ else:
             selection_method = st.radio(
                 "Personnel Selection Method:",
                 ["Manual Input", "Load from Database", "Mixed (Database + Manual)"],
-                horizontal=True
+                horizontal=True,
+                key="selection_method_main"
             )
         
         if 'personnel_list' not in st.session_state:
             st.session_state.personnel_list = []
+        
+        # Store selected indices in session state to persist across reruns
+        if 'selected_indices_temp' not in st.session_state:
+            st.session_state.selected_indices_temp = []
         
         if selection_method == "Load from Database":
             if df_engr_tech_db is None or df_engr_tech_db.empty:
@@ -996,9 +1001,12 @@ else:
                                 key="selected_personnel_db_main"
                             )
                             
-                            col_add, col_clear = st.columns([1, 4])
+                            # Store selected indices in session state
+                            st.session_state.selected_indices_temp = selected_indices
+                            
+                            col_add, col_add_all, col_clear = st.columns([1, 1, 2])
                             with col_add:
-                                if st.button("➕ Add Selected to Manifest", use_container_width=True):
+                                if st.button("➕ Add Selected", use_container_width=True):
                                     if selected_indices:
                                         added_count = 0
                                         for idx in selected_indices:
@@ -1013,10 +1021,39 @@ else:
                                                     added_count += 1
                                             except:
                                                 pass
-                                        st.success(f"Added {added_count} personnel to manifest!")
-                                        st.rerun()
+                                        if added_count > 0:
+                                            st.success(f"✅ Added {added_count} personnel to manifest!")
+                                        else:
+                                            st.info("All selected personnel are already in the manifest.")
                                     else:
                                         st.warning("Please select personnel first")
+                            
+                            with col_add_all:
+                                if st.button("➕ Add All Visible", use_container_width=True):
+                                    # Get all indices from the filtered list
+                                    all_indices = filtered_engr.index.tolist()
+                                    if all_indices:
+                                        added_count = 0
+                                        for idx in all_indices:
+                                            try:
+                                                person = filtered_engr.loc[idx]
+                                                if not any(p['name'] == person['Name'] for p in st.session_state.personnel_list):
+                                                    st.session_state.personnel_list.append({
+                                                        "name": person['Name'],
+                                                        "company": person['Company'],
+                                                        "id_no": person['ID No']
+                                                    })
+                                                    added_count += 1
+                                            except:
+                                                pass
+                                        if added_count > 0:
+                                            st.success(f"✅ Added all {added_count} visible personnel to manifest!")
+                                            # Clear the selection after adding all
+                                            st.session_state.selected_indices_temp = []
+                                        else:
+                                            st.info("All visible personnel are already in the manifest.")
+                                    else:
+                                        st.warning("No personnel to add.")
                         else:
                             st.warning("No personnel match the current filters")
                     else:
@@ -1036,13 +1073,15 @@ else:
                 
                 if st.button("➕ Add Manual Entry", key="add_manual_db"):
                     if manual_name:
-                        st.session_state.personnel_list.append({
-                            "name": manual_name,
-                            "company": manual_company,
-                            "id_no": manual_id
-                        })
-                        st.success(f"Added {manual_name} to manifest!")
-                        st.rerun()
+                        if not any(p['name'] == manual_name for p in st.session_state.personnel_list):
+                            st.session_state.personnel_list.append({
+                                "name": manual_name,
+                                "company": manual_company,
+                                "id_no": manual_id
+                            })
+                            st.success(f"✅ Added {manual_name} to manifest!")
+                        else:
+                            st.warning(f"{manual_name} is already in the manifest.")
         
         if selection_method == "Manual Input":
             # Track visibility dynamically up to 40 entries
@@ -1052,6 +1091,32 @@ else:
                     
             visible_count = sum(1 for i in range(1, 41) if st.session_state[f"p_show_{i}"])
             
+            # Add "Add All" button at the top
+            col_add_all_manual, col_spacer = st.columns([1, 3])
+            with col_add_all_manual:
+                if st.button("➕ Add All Visible Fields", key="add_all_manual", use_container_width=True):
+                    added_count = 0
+                    for i in range(1, 41):
+                        if st.session_state[f"p_show_{i}"]:
+                            name_key = f"name_{i}"
+                            comp_key = f"comp_{i}"
+                            id_key = f"id_{i}"
+                            
+                            if name_key in st.session_state and st.session_state[name_key]:
+                                name = st.session_state[name_key]
+                                if not any(p['name'] == name for p in st.session_state.personnel_list):
+                                    st.session_state.personnel_list.append({
+                                        "name": name,
+                                        "company": st.session_state.get(comp_key, ""),
+                                        "id_no": st.session_state.get(id_key, "")
+                                    })
+                                    added_count += 1
+                    if added_count > 0:
+                        st.success(f"✅ Added {added_count} personnel to manifest!")
+                    else:
+                        st.info("No new personnel to add.")
+            
+            # Display the manual input fields
             for i in range(1, 41):
                 if st.session_state[f"p_show_{i}"]:
                     p_col1, p_col2, p_col3 = st.columns([2, 2, 2])
@@ -1061,10 +1126,10 @@ else:
                         p_comp = st.text_input(f"Company/Vendor {i}", key=f"comp_{i}")
                     with p_col3:
                         p_id = st.text_input(f"Security ID No. {i}", key=f"id_{i}")
-                        
-                    if p_name: 
-                        if not any(p['name'] == p_name for p in st.session_state.personnel_list):
-                            st.session_state.personnel_list.append({"name": p_name, "company": p_comp, "id_no": p_id})
+                            
+                    # Auto-add if name is entered and not already in list
+                    if p_name and not any(p['name'] == p_name for p in st.session_state.personnel_list):
+                        st.session_state.personnel_list.append({"name": p_name, "company": p_comp, "id_no": p_id})
 
             if visible_count < 40:
                 if st.button("➕ Add More Personnel Fields", key="add_more_fields"):
@@ -1168,25 +1233,54 @@ else:
                                 key="mixed_selection"
                             )
                             
-                            if st.button("➕ Add Selected", key="add_mixed"):
-                                if selected_indices:
-                                    added_count = 0
-                                    for idx in selected_indices:
-                                        try:
-                                            person = filtered_engr.loc[idx]
-                                            if not any(p['name'] == person['Name'] for p in st.session_state.personnel_list):
-                                                st.session_state.personnel_list.append({
-                                                    "name": person['Name'],
-                                                    "company": person['Company'],
-                                                    "id_no": person['ID No']
-                                                })
-                                                added_count += 1
-                                        except:
-                                            pass
-                                    st.success(f"Added {added_count} personnel!")
-                                    st.rerun()
-                                else:
-                                    st.warning("Please select personnel first")
+                            col_add, col_add_all, col_spacer = st.columns([1, 1, 2])
+                            
+                            with col_add:
+                                if st.button("➕ Add Selected", key="add_mixed"):
+                                    if selected_indices:
+                                        added_count = 0
+                                        for idx in selected_indices:
+                                            try:
+                                                person = filtered_engr.loc[idx]
+                                                if not any(p['name'] == person['Name'] for p in st.session_state.personnel_list):
+                                                    st.session_state.personnel_list.append({
+                                                        "name": person['Name'],
+                                                        "company": person['Company'],
+                                                        "id_no": person['ID No']
+                                                    })
+                                                    added_count += 1
+                                            except:
+                                                pass
+                                        if added_count > 0:
+                                            st.success(f"✅ Added {added_count} personnel!")
+                                        else:
+                                            st.info("All selected personnel are already in the manifest.")
+                                    else:
+                                        st.warning("Please select personnel first")
+                            
+                            with col_add_all:
+                                if st.button("➕ Add All Visible", key="add_all_mixed"):
+                                    all_indices = filtered_engr.index.tolist()
+                                    if all_indices:
+                                        added_count = 0
+                                        for idx in all_indices:
+                                            try:
+                                                person = filtered_engr.loc[idx]
+                                                if not any(p['name'] == person['Name'] for p in st.session_state.personnel_list):
+                                                    st.session_state.personnel_list.append({
+                                                        "name": person['Name'],
+                                                        "company": person['Company'],
+                                                        "id_no": person['ID No']
+                                                    })
+                                                    added_count += 1
+                                            except:
+                                                pass
+                                        if added_count > 0:
+                                            st.success(f"✅ Added all {added_count} visible personnel!")
+                                        else:
+                                            st.info("All visible personnel are already in the manifest.")
+                                    else:
+                                        st.warning("No personnel to add.")
             
             st.markdown("---")
             st.subheader("Manual Addition")
@@ -1201,13 +1295,15 @@ else:
             
             if st.button("➕ Add Manual Entry", key="add_manual_mixed"):
                 if manual_name:
-                    st.session_state.personnel_list.append({
-                        "name": manual_name,
-                        "company": manual_company,
-                        "id_no": manual_id
-                    })
-                    st.success(f"Added {manual_name} to manifest!")
-                    st.rerun()
+                    if not any(p['name'] == manual_name for p in st.session_state.personnel_list):
+                        st.session_state.personnel_list.append({
+                            "name": manual_name,
+                            "company": manual_company,
+                            "id_no": manual_id
+                        })
+                        st.success(f"✅ Added {manual_name} to manifest!")
+                    else:
+                        st.warning(f"{manual_name} is already in the manifest.")
         
         # Display current personnel manifest
         if st.session_state.personnel_list:
@@ -1218,9 +1314,11 @@ else:
             manifest_df['id_no'] = manifest_df['id_no'].apply(format_id_number)
             st.dataframe(manifest_df, hide_index=True, use_container_width=True)
             
-            if st.button("🗑️ Clear All Personnel"):
-                st.session_state.personnel_list = []
-                st.rerun()
+            col_clear, col_spacer = st.columns([1, 3])
+            with col_clear:
+                if st.button("🗑️ Clear All Personnel", use_container_width=True):
+                    st.session_state.personnel_list = []
+                    st.rerun()
         else:
             st.info("No personnel added yet. Use the methods above to add team members.")
         
