@@ -757,6 +757,7 @@ else:
         else:
             filtered_db = df_db
         
+        # Cache the plaid list for performance
         plaid_list = sorted(filtered_db['PLAID'].unique())
         selected_plaids = st.multiselect(
             "Search or Select Site IDs (PLAID):", 
@@ -1330,14 +1331,27 @@ else:
                 st.warning("Please add at least one personnel entry to populate the work manifest.")
             else:
                 try:
+                    # Clear previous files before generating new ones
+                    st.session_state['generated_files'] = []
+                    st.session_state['files_generated'] = False
+                    
                     site_groups = split_sites_by_territory_and_fm(matching_sites)
                     
                     total_groups = len(site_groups)
-                    st.info(f"📋 Generating **{total_groups} RAAWA files**...")
+                    
+                    # Create a progress bar
+                    progress_bar = st.progress(0)
+                    status_text = st.empty()
                     
                     file_details = []
+                    total_files = total_groups
+                    processed = 0
                     
                     for group_info in site_groups:
+                        processed += 1
+                        status_text.text(f"Processing file {processed} of {total_files}...")
+                        progress_bar.progress(processed / total_files)
+                        
                         group_sites = group_info['dataframe']
                         territory = group_info['territory']
                         facility_manager = group_info['facility_manager']
@@ -1395,9 +1409,19 @@ else:
                         # Force garbage collection after each file
                         gc.collect()
                     
+                    # Clear progress indicators
+                    progress_bar.empty()
+                    status_text.empty()
+                    
+                    # Store in session state
                     st.session_state['generated_files'] = file_details
                     st.session_state['files_generated'] = True
-                    st.rerun()
+                    
+                    # Show success message without rerun
+                    if len(file_details) > 0:
+                        st.success(f"✅ Successfully generated {len(file_details)} RAAWA files!")
+                    else:
+                        st.error("No files were generated. Please check the errors above.")
                         
                 except Exception as ex:
                     st.error(f"Error: {ex}")
@@ -1405,7 +1429,8 @@ else:
                     st.error(traceback.format_exc())
         
         # --- DISPLAY DOWNLOAD BUTTONS FOR GENERATED FILES ---
-        if st.session_state.get('files_generated', False):
+        # This section displays without requiring a rerun
+        if st.session_state.get('generated_files', []):
             st.markdown("---")
             st.markdown("## 📥 Download Generated RAAWA Files")
             
@@ -1470,9 +1495,9 @@ else:
             col_clear, col_spacer = st.columns([1, 3])
             with col_clear:
                 if st.button("🔄 Clear Files & Start New RAAWA", use_container_width=True):
-                    st.session_state['files_generated'] = False
+                    # Clear all session state related to files
                     st.session_state['generated_files'] = []
-                    st.session_state.personnel_list = []
+                    st.session_state['files_generated'] = False
                     gc.collect()
                     st.rerun()
     else:
