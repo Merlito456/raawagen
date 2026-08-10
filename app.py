@@ -164,12 +164,17 @@ def load_databases():
         # --- LOAD SITE DATABASES FOR ALL REGIONS ---
         
         # 1. Load Mindanao (MIN) Database
-        df_min = pd.read_excel(
-            "Globe FO Engr Conatct_Vendor.xlsx", 
-            sheet_name="MIN",
-            dtype=str
-        )
-        df_min['REGION'] = 'MIN'
+        try:
+            df_min = pd.read_excel(
+                "Globe FO Engr Conatct_Vendor.xlsx", 
+                sheet_name="MIN",
+                dtype=str
+            )
+            df_min['REGION'] = 'MIN'
+            st.info(f"✅ Loaded MIN database: {len(df_min)} sites")
+        except Exception as e:
+            st.warning(f"MIN database not found: {e}")
+            df_min = pd.DataFrame()
         
         # 2. Load Visayas (VIS) Database
         try:
@@ -178,6 +183,7 @@ def load_databases():
                 dtype=str
             )
             df_vis['REGION'] = 'VIS'
+            st.info(f"✅ Loaded VIS database: {len(df_vis)} sites")
         except Exception as e:
             st.warning(f"VIS database not found or error loading: {e}")
             df_vis = pd.DataFrame()
@@ -189,12 +195,18 @@ def load_databases():
                 dtype=str
             )
             df_luz['REGION'] = 'LUZ'
+            st.info(f"✅ Loaded LUZ database: {len(df_luz)} sites")
         except Exception as e:
             st.warning(f"LUZ database not found or error loading: {e}")
             df_luz = pd.DataFrame()
         
         # Combine all site databases
         df_sites = pd.concat([df_min, df_vis, df_luz], ignore_index=True)
+        
+        # If no sites loaded, create empty dataframe with required columns
+        if df_sites.empty:
+            st.error("No site databases loaded! Please check your files.")
+            df_sites = pd.DataFrame(columns=['PLAID', 'SITE', 'REGION', 'TERRITORY', 'NEW ENGINEER_AH', 'CONTACT NUMBER', 'SITE_ADD'])
         
         # Standardize column names
         # Try to find the right columns for each region's database
@@ -821,15 +833,8 @@ else:
             )
         
         with col_region:
-            if df_db is not None and 'REGION' in df_db.columns:
-                site_regions = sorted(df_db['REGION'].dropna().unique())
-                site_regions = [r for r in site_regions if str(r).strip() != '']
-                site_regions = [r for r in site_regions if r in ['LUZ', 'VIS', 'MIN']]
-                
-                if not site_regions:
-                    site_regions = ['LUZ', 'VIS', 'MIN']
-            else:
-                site_regions = ['LUZ', 'VIS', 'MIN']
+            # HARDCODE REGIONS - Always show LUZ, VIS, MIN regardless of database
+            site_regions = ['LUZ', 'VIS', 'MIN']
             
             selected_region = st.selectbox(
                 "Select Region:",
@@ -843,20 +848,30 @@ else:
         st.markdown("## 📍 Step 2: Site Selection")
         st.markdown("Select the sites for your RAAWA request (unlimited number supported)")
         
+        # Filter by selected region - handle case where region might not exist in db yet
         if selected_region != 'All Regions' and df_db is not None and 'REGION' in df_db.columns:
             filtered_db = df_db[df_db['REGION'].str.upper() == selected_region.upper()]
         else:
             filtered_db = df_db
         
+        # Check if filtered_db is empty and show a helpful message
+        if filtered_db.empty and selected_region != 'All Regions':
+            st.warning(f"⚠️ No sites found for region: **{selected_region}**. Please check if the database file for this region is loaded correctly.")
+        
         # Cache the plaid list for performance
-        plaid_list = sorted(filtered_db['PLAID'].unique())
-        selected_plaids = st.multiselect(
-            "Search or Select Site IDs (PLAID):", 
-            options=plaid_list,
-            default=[]
-        )
-            
-        matching_sites = filtered_db[filtered_db['PLAID'].isin(selected_plaids)]
+        plaid_list = sorted(filtered_db['PLAID'].unique()) if not filtered_db.empty else []
+        
+        if plaid_list:
+            selected_plaids = st.multiselect(
+                "Search or Select Site IDs (PLAID):", 
+                options=plaid_list,
+                default=[]
+            )
+                
+            matching_sites = filtered_db[filtered_db['PLAID'].isin(selected_plaids)]
+        else:
+            matching_sites = pd.DataFrame()
+            st.info("No sites available for the selected region.")
         
         if not matching_sites.empty:
             conflicts = check_conflicts(matching_sites)
@@ -909,8 +924,12 @@ else:
                     st.markdown("---")
                 
         else:
-            st.info("💡 Please select at least one site to begin")
-            st.stop()
+            if plaid_list:
+                st.info("💡 Please select at least one site to begin")
+                st.stop()
+            else:
+                st.warning("No sites available for the selected region. Please check your database files.")
+                st.stop()
 
         st.markdown("---")
 
