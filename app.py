@@ -436,11 +436,33 @@ def create_raawa_file(matching_sites, personnel_list, scope_of_work, start_date,
         else:
             ws["A41"].value = scope_of_work
         
+        # Set the Facility Manager / Engineer (First Signatory at A48)
         original_signatory = ws["A48"].value
         if original_signatory:
             ws["A48"].value = str(original_signatory).replace("NEW ENGINEER_AH", facility_manager)
         else:
             ws["A48"].value = f"{facility_manager}\nSignature Over Printed Name / Date"
+        
+        # --- SET THE SECURITY APPROVER (Second Signatory at A50) ---
+        # Check if this is a VIS site by looking at the region
+        is_vis = False
+        region = ''
+        if not matching_sites.empty:
+            first_site = matching_sites.iloc[0]
+            region = str(first_site.get('REGION', '')).upper().strip()
+            if region == 'VIS':
+                is_vis = True
+        
+        # Set security approver based on region
+        if is_vis:
+            # For VIS: Use JOJO A. VIRAY
+            ws["A50"].value = "JOJO A. VIRAY\nSignature Over Printed Name / Date"
+            st.info(f"🔒 VIS Region detected - Security Approver set to: JOJO A. VIRAY")
+        else:
+            # For MIN and LUZ: Keep the template default
+            # The template already has "DIANA BALT" or similar
+            # If you want to override for specific regions, add logic here
+            pass
         
         # Apply consistent font sizing
         for row in range(start_personnel_row, start_personnel_row + (len(personnel_list)//2 + 1)):
