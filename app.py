@@ -438,6 +438,7 @@ def load_databases():
 # --- RAAWA FILE CREATION (FIXED WITH PROPER MERGED CELL HANDLING) ---
 # --- RAAWA FILE CREATION (FIXED WITH PROPER MERGED CELL HANDLING) ---
 # --- RAAWA FILE CREATION (FIXED WITH PROPER MERGED CELL HANDLING) ---
+# --- RAAWA FILE CREATION (FIXED WITH PROPER MERGED CELL HANDLING) ---
 def create_raawa_file(matching_sites, personnel_list, scope_of_work, start_date, end_date, req_profile, facility_manager, batch_num=1, total_batches=1):
     """Helper function to create a single RAAWA file with dynamic font sizing"""
     try:
@@ -542,8 +543,24 @@ def create_raawa_file(matching_sites, personnel_list, scope_of_work, start_date,
             safe_set_cell(41, 1, scope_of_work)
         
         # --- SET FACILITY MANAGER ---
-        # Just set the name - the template already has "Signature Over Printed Name / Date"
-        safe_set_cell(48, 1, facility_manager)
+        # Get the current value of A48 to preserve the signature text
+        current_a48 = ws["A48"].value
+        if current_a48:
+            # Replace the name part while keeping the signature text
+            # The template has format: "NEW ENGINEER_AH\nSignature Over Printed Name / Date"
+            # We want: "KEVIN SALVACION\nSignature Over Printed Name / Date"
+            if "\n" in str(current_a48):
+                parts = str(current_a48).split("\n", 1)
+                if len(parts) == 2:
+                    # Keep the signature part (the second part after newline)
+                    signature_part = parts[1]
+                    safe_set_cell(48, 1, f"{facility_manager}\n{signature_part}")
+                else:
+                    safe_set_cell(48, 1, f"{facility_manager}\nSignature Over Printed Name / Date")
+            else:
+                safe_set_cell(48, 1, f"{facility_manager}\nSignature Over Printed Name / Date")
+        else:
+            safe_set_cell(48, 1, f"{facility_manager}\nSignature Over Printed Name / Date")
         
         # --- SET SECURITY APPROVER ---
         region = ''
@@ -551,12 +568,32 @@ def create_raawa_file(matching_sites, personnel_list, scope_of_work, start_date,
             first_site = matching_sites.iloc[0]
             region = str(first_site.get('REGION', '')).upper().strip()
         
-        # Set security approver based on region
+        # Get the current value of A50 to preserve the signature text
+        current_a50 = ws["A50"].value
+        
         if region == 'VIS':
-            safe_set_cell(50, 1, "JOJO A. VIRAY")
+            # For VIS: Use JOJO A. VIRAY with signature text
+            if current_a50 and "\n" in str(current_a50):
+                parts = str(current_a50).split("\n", 1)
+                if len(parts) == 2:
+                    signature_part = parts[1]
+                    safe_set_cell(50, 1, f"JOJO A. VIRAY\n{signature_part}")
+                else:
+                    safe_set_cell(50, 1, f"JOJO A. VIRAY\nSignature Over Printed Name / Date")
+            else:
+                safe_set_cell(50, 1, f"JOJO A. VIRAY\nSignature Over Printed Name / Date")
             st.info(f"🔒 VIS Region detected - Security Approver set to: JOJO A. VIRAY")
         elif region == 'LUZ':
-            safe_set_cell(50, 1, "TBD - Security Approver")
+            # For LUZ: Use TBD with signature text
+            if current_a50 and "\n" in str(current_a50):
+                parts = str(current_a50).split("\n", 1)
+                if len(parts) == 2:
+                    signature_part = parts[1]
+                    safe_set_cell(50, 1, f"TBD - Security Approver\n{signature_part}")
+                else:
+                    safe_set_cell(50, 1, f"TBD - Security Approver\nSignature Over Printed Name / Date")
+            else:
+                safe_set_cell(50, 1, f"TBD - Security Approver\nSignature Over Printed Name / Date")
             st.info(f"🔒 LUZ Region detected - Security Approver set to: TBD (Please update when known)")
         # For MIN, keep template default (DIANALAN BALT)
         
