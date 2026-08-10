@@ -436,6 +436,7 @@ def load_databases():
 
 # --- RAAWA FILE CREATION (FIXED WITH PROPER MERGED CELL HANDLING) ---
 # --- RAAWA FILE CREATION (FIXED WITH PROPER MERGED CELL HANDLING) ---
+# --- RAAWA FILE CREATION (FIXED WITH PROPER MERGED CELL HANDLING) ---
 def create_raawa_file(matching_sites, personnel_list, scope_of_work, start_date, end_date, req_profile, facility_manager, batch_num=1, total_batches=1):
     """Helper function to create a single RAAWA file with dynamic font sizing"""
     try:
@@ -460,6 +461,23 @@ def create_raawa_file(matching_sites, personnel_list, scope_of_work, start_date,
             # Not merged, safe to write
             cell.value = value
             return cell
+        
+        # Helper function to safely set font on a cell
+        def safe_set_font(row, col, font):
+            """Safely set font on a cell, handling merged cells"""
+            cell = ws.cell(row=row, column=col)
+            # Check if this cell is part of a merged range
+            for merged_range in ws.merged_cells.ranges:
+                if cell.coordinate in merged_range:
+                    # Only set font if this is the top-left cell of the merged range
+                    if cell.coordinate == merged_range.start_cell.coordinate:
+                        cell.font = font
+                        return True
+                    else:
+                        return False
+            # Not merged, safe to set font
+            cell.font = font
+            return True
         
         # --- SET REQUISITIONER DETAILS ---
         safe_set_cell(3, 4, req_profile["name"])   # D3
@@ -488,10 +506,6 @@ def create_raawa_file(matching_sites, personnel_list, scope_of_work, start_date,
         safe_set_cell(17, 5, end_date.strftime("%Y-%m-%d"))    # E17
         
         start_personnel_row = 19
-        
-        def get_font_size(text, min_size=6, max_size=10):
-            # Always return 6 for Calibri font
-            return 6
         
         # --- SET PERSONNEL WITH MERGED CELL HANDLING ---
         for idx, person in enumerate(personnel_list):
@@ -531,60 +545,48 @@ def create_raawa_file(matching_sites, personnel_list, scope_of_work, start_date,
         facility_manager_with_underscore = f"{facility_manager}\n_________________________\nSignature Over Printed Name / Date"
         safe_set_cell(48, 1, facility_manager_with_underscore)
         
-        # --- SET SECURITY APPROVER (ONLY FOR VIS) ---
+        # --- SET SECURITY APPROVER ---
         region = ''
         if not matching_sites.empty:
             first_site = matching_sites.iloc[0]
             region = str(first_site.get('REGION', '')).upper().strip()
         
-        # Only override security approver for VIS region
+        # Set security approver based on region
         if region == 'VIS':
-            # Add underscore to JOJO A. VIRAY
             security_approver = "JOJO A. VIRAY\n_________________________\nSignature Over Printed Name / Date"
             safe_set_cell(50, 1, security_approver)
             st.info(f"🔒 VIS Region detected - Security Approver set to: JOJO A. VIRAY")
         elif region == 'LUZ':
-            # For LUZ, keep template default or set to TBD with underscore
             security_approver = "TBD - Security Approver\n_________________________\nSignature Over Printed Name / Date"
             safe_set_cell(50, 1, security_approver)
             st.info(f"🔒 LUZ Region detected - Security Approver set to: TBD (Please update when known)")
-        # For MIN and other regions: Keep the template default
+        # For MIN, keep template default (DIANALAN BALT)
         
-        # --- APPLY FONT SIZING (SKIP MERGED CELLS) ---
-        # Header font - Calibri 6
-        header_font = Font(name="Calibri", size=6, bold=False, italic=False)
-        for col_idx in range(1, 12):
-            cell = ws.cell(row=1, column=col_idx)
-            if cell.coordinate not in ws.merged_cells:
-                cell.font = header_font
+        # --- APPLY CALIBRI 6 FONT TO ALL CELLS ---
+        calibri_6 = Font(name="Calibri", size=6)
+        calibri_6_underline = Font(name="Calibri", size=6, underline="single")
+        calibri_6_bold = Font(name="Calibri", size=6, bold=False, italic=False)
         
-        # Personnel font sizing - Calibri 6
-        for row in range(start_personnel_row, start_personnel_row + (len(personnel_list)//2 + 1)):
-            for col in [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]:
-                cell = ws.cell(row=row, column=col)
-                if cell.coordinate in ws.merged_cells:
-                    continue
-                if cell.value and row >= start_personnel_row:
-                    cell.font = Font(name="Calibri", size=6)
-        
-        # Signature font - Calibri 6 with underline
-        sig_font = Font(name="Calibri", size=6, underline="single")
-        if ws["A48"].coordinate not in ws.merged_cells:
-            ws["A48"].font = sig_font
-        if ws["A50"].coordinate not in ws.merged_cells:
-            ws["A50"].font = sig_font
-        
-        # Apply Calibri 6 to remaining cells
-        for row in range(2, 55):
-            for col in range(1, 12):
-                cell = ws.cell(row=row, column=col)
-                if cell.coordinate in ws.merged_cells:
-                    continue
+        # Apply to all cells in the worksheet
+        for row in ws.iter_rows(min_row=1, max_row=ws.max_row, min_col=1, max_col=11):
+            for cell in row:
                 if cell.value:
-                    if cell.font and cell.font.size != 6:
-                        cell.font = Font(name="Calibri", size=6)
-                    elif not cell.font:
-                        cell.font = Font(name="Calibri", size=6)
+                    # Check if cell is in signature section (rows 48-55) - apply underline
+                    if cell.row >= 48 and cell.row <= 55:
+                        safe_set_font(cell.row, cell.column, calibri_6_underline)
+                    # Header row (row 1) - bold but not italic
+                    elif cell.row == 1:
+                        safe_set_font(cell.row, cell.column, calibri_6_bold)
+                    # All other cells
+                    else:
+                        safe_set_font(cell.row, cell.column, calibri_6)
+        
+        # Specifically ensure A48 and A50 have Calibri 6 with underline
+        safe_set_font(48, 1, calibri_6_underline)
+        safe_set_font(50, 1, calibri_6_underline)
+        
+        # Also ensure A41 (scope of work) has Calibri 6
+        safe_set_font(41, 1, calibri_6)
         
         buffer = io.BytesIO()
         wb.save(buffer)
