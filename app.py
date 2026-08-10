@@ -657,7 +657,7 @@ def check_conflicts(matching_sites):
         'num_combinations': len(unique_combos)
     }
 
-# --- REQUISITIONER SELECTION FUNCTION ---
+# --- REQUISITIONER SELECTION FUNCTION (FIXED) ---
 def get_requisitioner_selection(req_db):
     """Display requisitioner selection interface with manual and database options"""
     
@@ -683,24 +683,25 @@ def get_requisitioner_selection(req_db):
     
     st.session_state.req_selection_method = req_method
     
-    # Store selected requisitioner in session state
-    if 'manual_req_name' not in st.session_state:
-        st.session_state.manual_req_name = ""
-    if 'manual_req_dept' not in st.session_state:
-        st.session_state.manual_req_dept = ""
-    if 'manual_req_id' not in st.session_state:
-        st.session_state.manual_req_id = ""
-    if 'manual_req_contact' not in st.session_state:
-        st.session_state.manual_req_contact = ""
+    # Store manual input values in session state
+    for key in ['manual_req_name', 'manual_req_dept', 'manual_req_id', 'manual_req_contact']:
+        if key not in st.session_state:
+            st.session_state[key] = ""
     
     if req_method == "Manual Input":
         col1, col2 = st.columns(2)
         with col1:
-            manual_name = st.text_input("Requisitioner Name:", key="manual_req_name_input")
-            manual_dept = st.text_input("Department/Group:", key="manual_req_dept_input")
+            manual_name = st.text_input("Requisitioner Name:", value=st.session_state.manual_req_name, key="manual_req_name_input")
+            manual_dept = st.text_input("Department/Group:", value=st.session_state.manual_req_dept, key="manual_req_dept_input")
         with col2:
-            manual_id = st.text_input("ID Number:", key="manual_req_id_input")
-            manual_contact = st.text_input("Contact Number:", key="manual_req_contact_input")
+            manual_id = st.text_input("ID Number:", value=st.session_state.manual_req_id, key="manual_req_id_input")
+            manual_contact = st.text_input("Contact Number:", value=st.session_state.manual_req_contact, key="manual_req_contact_input")
+        
+        # Update session state with current values
+        st.session_state.manual_req_name = manual_name
+        st.session_state.manual_req_dept = manual_dept
+        st.session_state.manual_req_id = manual_id
+        st.session_state.manual_req_contact = manual_contact
         
         if st.button("✅ Set Requisitioner", key="set_manual_req"):
             if manual_name:
@@ -711,7 +712,6 @@ def get_requisitioner_selection(req_db):
                     "contact": format_contact_number(manual_contact) if manual_contact else "N/A"
                 }
                 st.success(f"✅ Requisitioner set to: {manual_name}")
-                st.rerun()
         
         # Show current manual requisitioner
         if st.session_state.selected_requisitioner["name"] != "N/A":
@@ -771,7 +771,6 @@ def get_requisitioner_selection(req_db):
                             "contact": format_contact_number(req_data["contact"])
                         }
                         st.success(f"✅ Requisitioner set to: {req_data['name']}")
-                        st.rerun()
             else:
                 st.warning("No requisitioners match your search")
         else:
@@ -828,16 +827,21 @@ def get_requisitioner_selection(req_db):
                             "contact": format_contact_number(req_data["contact"])
                         }
                         st.success(f"✅ Requisitioner set to: {req_data['name']}")
-                        st.rerun()
             else:
                 st.warning("No requisitioner database loaded")
         
         with col2:
             st.subheader("✏️ Manual Entry")
-            manual_name = st.text_input("Requisitioner Name:", key="manual_req_name_mixed")
-            manual_dept = st.text_input("Department/Group:", key="manual_req_dept_mixed")
-            manual_id = st.text_input("ID Number:", key="manual_req_id_mixed")
-            manual_contact = st.text_input("Contact Number:", key="manual_req_contact_mixed")
+            manual_name = st.text_input("Requisitioner Name:", value=st.session_state.manual_req_name, key="manual_req_name_mixed")
+            manual_dept = st.text_input("Department/Group:", value=st.session_state.manual_req_dept, key="manual_req_dept_mixed")
+            manual_id = st.text_input("ID Number:", value=st.session_state.manual_req_id, key="manual_req_id_mixed")
+            manual_contact = st.text_input("Contact Number:", value=st.session_state.manual_req_contact, key="manual_req_contact_mixed")
+            
+            # Update session state with current values
+            st.session_state.manual_req_name = manual_name
+            st.session_state.manual_req_dept = manual_dept
+            st.session_state.manual_req_id = manual_id
+            st.session_state.manual_req_contact = manual_contact
             
             if st.button("✅ Set Manual Requisitioner", key="set_manual_req_mixed"):
                 if manual_name:
@@ -848,7 +852,6 @@ def get_requisitioner_selection(req_db):
                         "contact": format_contact_number(manual_contact) if manual_contact else "N/A"
                     }
                     st.success(f"✅ Requisitioner set to: {manual_name}")
-                    st.rerun()
         
         # Show current requisitioner
         if st.session_state.selected_requisitioner["name"] != "N/A":
