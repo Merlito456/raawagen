@@ -183,13 +183,7 @@ def load_databases():
                 dtype=str
             )
             
-            # Store original column names for reference
-            st.info(f"VIS columns: {', '.join(df_vis.columns.tolist())}")
-            
-            # Map VIS columns to standard format - CREATE COPIES of the data
-            # VIS column mapping: AREA, LATITUDE, LONGITUDE, PLAID, SITENAME, WIRELINE_NAME (NMS NAMES), ASSIGN_CITY/MUNICIPALITY, Hub, Super FO, Area Head, Site Address
-            
-            # Copy data to standard columns
+            # Map VIS columns to standard format
             if 'PLAID' in df_vis.columns:
                 df_vis['PLAID'] = df_vis['PLAID']
             else:
@@ -212,11 +206,9 @@ def load_databases():
             else:
                 df_vis['NEW ENGINEER_AH'] = 'Unassigned'
             
-            # Set TERRITORY for VIS - use a default or derive from other data
             if 'TERRITORY' not in df_vis.columns:
                 df_vis['TERRITORY'] = '0'
             
-            # Set CONTACT NUMBER for VIS
             if 'CONTACT NUMBER' not in df_vis.columns:
                 df_vis['CONTACT NUMBER'] = 'N/A'
             
@@ -232,6 +224,40 @@ def load_databases():
                 "ROGMA Unified SKSK DB for Sharing (1).xlsx",
                 dtype=str
             )
+            
+            # Map LUZ columns to standard format
+            # A1 = REGION, C1 = PLAID, D1 = SITENAME, F1 = SITE_ADD, O1 = TERRITORY, P1 = ENGINEER_AH
+            
+            if 'PLAID' in df_luz.columns:
+                df_luz['PLAID'] = df_luz['PLAID']
+            else:
+                df_luz['PLAID'] = df_luz.index.astype(str)
+            
+            if 'SITENAME' in df_luz.columns:
+                df_luz['SITE'] = df_luz['SITENAME']
+            else:
+                df_luz['SITE'] = 'Unknown Site'
+            
+            if 'SITE_ADD' in df_luz.columns:
+                df_luz['SITE_ADD'] = df_luz['SITE_ADD']
+            else:
+                df_luz['SITE_ADD'] = 'N/A'
+            
+            # For LUZ, the Facility Manager is ENGINEER_AH (Column P)
+            if 'ENGINEER_AH' in df_luz.columns:
+                df_luz['NEW ENGINEER_AH'] = df_luz['ENGINEER_AH']
+            else:
+                df_luz['NEW ENGINEER_AH'] = 'Unassigned'
+            
+            # For LUZ, TERRITORY is in Column O
+            if 'TERRITORY' in df_luz.columns:
+                df_luz['TERRITORY'] = df_luz['TERRITORY']
+            else:
+                df_luz['TERRITORY'] = '0'
+            
+            if 'CONTACT NUMBER' not in df_luz.columns:
+                df_luz['CONTACT NUMBER'] = 'N/A'
+            
             df_luz['REGION'] = 'LUZ'
             st.info(f"✅ Loaded LUZ database: {len(df_luz)} sites")
         except Exception as e:
@@ -444,24 +470,26 @@ def create_raawa_file(matching_sites, personnel_list, scope_of_work, start_date,
             ws["A48"].value = f"{facility_manager}\nSignature Over Printed Name / Date"
         
         # --- SET THE SECURITY APPROVER (Second Signatory at A50) ---
-        # Check if this is a VIS site by looking at the region
-        is_vis = False
+        # Check the region of the selected sites
         region = ''
         if not matching_sites.empty:
             first_site = matching_sites.iloc[0]
             region = str(first_site.get('REGION', '')).upper().strip()
-            if region == 'VIS':
-                is_vis = True
         
         # Set security approver based on region
-        if is_vis:
+        if region == 'VIS':
             # For VIS: Use JOJO A. VIRAY
             ws["A50"].value = "JOJO A. VIRAY\nSignature Over Printed Name / Date"
             st.info(f"🔒 VIS Region detected - Security Approver set to: JOJO A. VIRAY")
+        elif region == 'LUZ':
+            # For LUZ: No specific security approver defined yet
+            # Keep the template default or set to a placeholder
+            # You can update this when you know who the security approver is for LUZ
+            ws["A50"].value = "TBD - Security Approver\nSignature Over Printed Name / Date"
+            st.info(f"🔒 LUZ Region detected - Security Approver set to: TBD (Please update when known)")
         else:
-            # For MIN and LUZ: Keep the template default
+            # For MIN and other regions: Keep the template default
             # The template already has "DIANA BALT" or similar
-            # If you want to override for specific regions, add logic here
             pass
         
         # Apply consistent font sizing
