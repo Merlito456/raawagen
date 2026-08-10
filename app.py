@@ -434,7 +434,7 @@ def load_databases():
         st.error(traceback.format_exc())
         return None, None, None
 
-# --- RAAWA FILE CREATION ---
+# --- RAAWA FILE CREATION (FIXED FOR MERGED CELLS) ---
 def create_raawa_file(matching_sites, personnel_list, scope_of_work, start_date, end_date, req_profile, facility_manager, batch_num=1, total_batches=1):
     """Helper function to create a single RAAWA file with dynamic font sizing"""
     try:
@@ -442,6 +442,7 @@ def create_raawa_file(matching_sites, personnel_list, scope_of_work, start_date,
         wb = openpyxl.load_workbook(template_file)
         ws = wb.active 
         
+        # Set requisitioner details - use individual cells (not merged)
         ws["D3"].value = req_profile["name"]
         ws["D4"].value = req_profile["dept"]
         
@@ -504,20 +505,20 @@ def create_raawa_file(matching_sites, personnel_list, scope_of_work, start_date,
         for r in range(start_personnel_row + (len(personnel_list)//2 + 1), 39):
             ws.row_dimensions[r].hidden = True
         
+        # --- SET SCOPE OF WORK (A41 is merged) ---
         if total_batches > 1:
             ws["A41"].value = f"{scope_of_work}\n\n(Page {batch_num} of {total_batches} for this location group)"
         else:
             ws["A41"].value = scope_of_work
         
-        # Set the Facility Manager / Engineer (First Signatory at A48)
+        # --- SET FACILITY MANAGER (A48 is merged) ---
         original_signatory = ws["A48"].value
         if original_signatory:
             ws["A48"].value = str(original_signatory).replace("NEW ENGINEER_AH", facility_manager)
         else:
             ws["A48"].value = f"{facility_manager}\nSignature Over Printed Name / Date"
         
-        # --- SET THE SECURITY APPROVER (Second Signatory at A50) ---
-        # Check the region of the selected sites
+        # --- SET SECURITY APPROVER (A50 is merged) ---
         region = ''
         if not matching_sites.empty:
             first_site = matching_sites.iloc[0]
@@ -525,38 +526,48 @@ def create_raawa_file(matching_sites, personnel_list, scope_of_work, start_date,
         
         # Set security approver based on region
         if region == 'VIS':
-            # For VIS: Use JOJO A. VIRAY
             ws["A50"].value = "JOJO A. VIRAY\nSignature Over Printed Name / Date"
             st.info(f"🔒 VIS Region detected - Security Approver set to: JOJO A. VIRAY")
         elif region == 'LUZ':
-            # For LUZ: No specific security approver defined yet
             ws["A50"].value = "TBD - Security Approver\nSignature Over Printed Name / Date"
             st.info(f"🔒 LUZ Region detected - Security Approver set to: TBD (Please update when known)")
         else:
             # For MIN and other regions: Keep the template default
             pass
         
-        # Apply consistent font sizing
+        # --- APPLY FONT SIZING (SKIP MERGED CELLS) ---
         for row in range(start_personnel_row, start_personnel_row + (len(personnel_list)//2 + 1)):
             for col in [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]:
                 cell = ws.cell(row=row, column=col)
+                # Skip if cell is part of a merged range
+                if cell.coordinate in ws.merged_cells:
+                    continue
                 if cell.value and row >= start_personnel_row:
                     if cell.font and cell.font.size and cell.font.size > 6:
                         cell.font = Font(name="Calibri", size=6)
                     elif not cell.font:
                         cell.font = Font(name="Calibri", size=6)
         
+        # Set header font (skip merged cells)
         header_font = Font(name="Calibri", size=6, bold=False, italic=False)
         for col_idx in range(1, 12):
-            ws.cell(row=1, column=col_idx).font = header_font
+            cell = ws.cell(row=1, column=col_idx)
+            if cell.coordinate not in ws.merged_cells:
+                cell.font = header_font
         
+        # Set signature font (skip merged cells)
         sig_font = Font(name="Calibri", size=6, underline="single")
-        ws["A48"].font = sig_font
-        ws["A50"].font = sig_font
+        if ws["A48"].coordinate not in ws.merged_cells:
+            ws["A48"].font = sig_font
+        if ws["A50"].coordinate not in ws.merged_cells:
+            ws["A50"].font = sig_font
         
+        # Apply font sizing to remaining cells
         for row in range(start_personnel_row, 39):
             for col in [1, 4, 5, 6, 7, 8, 9, 10, 11]:
                 cell = ws.cell(row=row, column=col)
+                if cell.coordinate in ws.merged_cells:
+                    continue
                 if cell.value and row >= start_personnel_row:
                     if not cell.font or cell.font.size != 6:
                         cell.font = Font(name="Calibri", size=6)
@@ -573,6 +584,8 @@ def create_raawa_file(matching_sites, personnel_list, scope_of_work, start_date,
         
     except Exception as e:
         st.error(f"Error creating RAAWA file: {str(e)}")
+        import traceback
+        st.error(traceback.format_exc())
         return None
 
 # --- SITE GROUPING FUNCTIONS ---
@@ -657,7 +670,69 @@ def check_conflicts(matching_sites):
         'num_combinations': len(unique_combos)
     }
 
-# --- REQUISITIONER SELECTION FUNCTION (FIXED) ---
+# --- REQUISITIONER FUNCTION (AUTO-DETECT) ---
+def get_requisitioner_for_territory_and_project(territory, project, region):
+    """Get requisitioner profile based on territory, project, and region (auto mode)"""
+    if df_req_db is not None and 'Territory no.' in df_req_db.columns:
+        # Try exact match first
+        matching_reqs = df_req_db[
+            (df_req_db['Territory no.'] == territory) &
+            (df_req_db['Project'] == project) &
+            (df_req_db['Region'] == region)
+        ]
+        
+        if not matching_reqs.empty:
+            req_row = matching_reqs.iloc[0]
+            return {
+                "name": str(req_row.get("Name", "N/A")),
+                "dept": str(req_row.get("Dept./Group", "N/A")),
+                "id": format_id_number(req_row.get("ID #", "N/A")),
+                "contact": format_contact_number(req_row.get("Contact No.", "N/A"))
+            }
+        
+        # If exact match fails, try partial match
+        if project:
+            base_project = project.split(' - ')[0] if ' - ' in project else project
+            
+            matching_reqs = df_req_db[
+                (df_req_db['Territory no.'] == territory) &
+                (df_req_db['Project'].str.contains(base_project, case=False, na=False)) &
+                (df_req_db['Region'] == region)
+            ]
+            
+            if not matching_reqs.empty:
+                req_row = matching_reqs.iloc[0]
+                return {
+                    "name": str(req_row.get("Name", "N/A")),
+                    "dept": str(req_row.get("Dept./Group", "N/A")),
+                    "id": format_id_number(req_row.get("ID #", "N/A")),
+                    "contact": format_contact_number(req_row.get("Contact No.", "N/A"))
+                }
+    
+    # Fallback - try without project filter
+    if df_req_db is not None and 'Territory no.' in df_req_db.columns:
+        matching_reqs = df_req_db[
+            (df_req_db['Territory no.'] == territory) &
+            (df_req_db['Region'] == region)
+        ]
+        
+        if not matching_reqs.empty:
+            req_row = matching_reqs.iloc[0]
+            return {
+                "name": str(req_row.get("Name", "N/A")),
+                "dept": str(req_row.get("Dept./Group", "N/A")),
+                "id": format_id_number(req_row.get("ID #", "N/A")),
+                "contact": format_contact_number(req_row.get("Contact No.", "N/A"))
+            }
+    
+    return {
+        "name": f"Territory {territory} Engineer",
+        "dept": f"TERRITORY {territory}",
+        "id": "N/A",
+        "contact": "N/A"
+    }
+
+# --- REQUISITIONER SELECTION FUNCTION (MANUAL/DATABASE) ---
 def get_requisitioner_selection(req_db):
     """Display requisitioner selection interface with manual and database options"""
     
