@@ -226,8 +226,6 @@ def load_databases():
             )
             
             # Map LUZ columns to standard format
-            # A1 = REGION, C1 = PLAID, D1 = SITENAME, F1 = SITE_ADD, O1 = TERRITORY, P1 = ENGINEER_AH
-            
             if 'PLAID' in df_luz.columns:
                 df_luz['PLAID'] = df_luz['PLAID']
             else:
@@ -243,13 +241,11 @@ def load_databases():
             else:
                 df_luz['SITE_ADD'] = 'N/A'
             
-            # For LUZ, the Facility Manager is ENGINEER_AH (Column P)
             if 'ENGINEER_AH' in df_luz.columns:
                 df_luz['NEW ENGINEER_AH'] = df_luz['ENGINEER_AH']
             else:
                 df_luz['NEW ENGINEER_AH'] = 'Unassigned'
             
-            # For LUZ, TERRITORY is in Column O
             if 'TERRITORY' in df_luz.columns:
                 df_luz['TERRITORY'] = df_luz['TERRITORY']
             else:
@@ -333,22 +329,67 @@ def load_databases():
             )
             df_engr_tech.columns = df_engr_tech.columns.str.strip()
             
-            # Column mapping
-            if 'SEC ID' in df_engr_tech.columns:
-                df_engr_tech.rename(columns={'SEC ID': 'ID No'}, inplace=True)
-            elif 'ID No' not in df_engr_tech.columns:
-                for col in ['ID_NO', 'ID NUMBER', 'ID', 'SEC_ID']:
-                    if col in df_engr_tech.columns:
-                        df_engr_tech.rename(columns={col: 'ID No'}, inplace=True)
-                        break
+            # Check if we need to map columns from EngrTech
+            # The file might have different column names
             
-            if 'REGION' in df_engr_tech.columns:
-                df_engr_tech.rename(columns={'REGION': 'Region'}, inplace=True)
+            # Debug: Show columns found
+            st.info(f"EngrTech columns: {', '.join(df_engr_tech.columns.tolist())}")
+            
+            # Column mapping - check for different possible column names
+            possible_name_cols = ['Name', 'NAME', 'Full Name', 'FullName']
+            possible_company_cols = ['Company', 'COMPANY', 'Vendor', 'VENDOR']
+            possible_id_cols = ['ID No', 'ID', 'SEC ID', 'SEC_ID', 'Employee ID']
+            possible_region_cols = ['Region', 'REGION', 'Area']
+            
+            # Map Name column
+            name_col = None
+            for col in possible_name_cols:
+                if col in df_engr_tech.columns:
+                    name_col = col
+                    break
+            
+            # Map Company column
+            company_col = None
+            for col in possible_company_cols:
+                if col in df_engr_tech.columns:
+                    company_col = col
+                    break
+            
+            # Map ID column
+            id_col = None
+            for col in possible_id_cols:
+                if col in df_engr_tech.columns:
+                    id_col = col
+                    break
+            
+            # Map Region column
+            region_col = None
+            for col in possible_region_cols:
+                if col in df_engr_tech.columns:
+                    region_col = col
+                    break
+            
+            # Rename columns to standard names
+            if name_col and name_col != 'Name':
+                df_engr_tech.rename(columns={name_col: 'Name'}, inplace=True)
+            elif 'Name' not in df_engr_tech.columns:
+                # If no name column found, create a placeholder
+                df_engr_tech['Name'] = df_engr_tech.index.astype(str)
+            
+            if company_col and company_col != 'Company':
+                df_engr_tech.rename(columns={company_col: 'Company'}, inplace=True)
+            elif 'Company' not in df_engr_tech.columns:
+                df_engr_tech['Company'] = 'Unknown'
+            
+            if id_col and id_col != 'ID No':
+                df_engr_tech.rename(columns={id_col: 'ID No'}, inplace=True)
+            elif 'ID No' not in df_engr_tech.columns:
+                df_engr_tech['ID No'] = 'N/A'
+            
+            if region_col and region_col != 'Region':
+                df_engr_tech.rename(columns={region_col: 'Region'}, inplace=True)
             elif 'Region' not in df_engr_tech.columns:
-                for col in ['region']:
-                    if col in df_engr_tech.columns:
-                        df_engr_tech.rename(columns={col: 'Region'}, inplace=True)
-                        break
+                df_engr_tech['Region'] = 'N/A'
             
             # Format IDs
             if 'ID No' in df_engr_tech.columns:
@@ -367,10 +408,13 @@ def load_databases():
                 else:
                     df_engr_tech[col] = ''
             
-            # Clean Region
+            # Clean Region - convert to uppercase and ensure valid values
             if 'Region' in df_engr_tech.columns:
                 df_engr_tech['Region'] = df_engr_tech['Region'].str.upper().str.strip()
-                df_engr_tech['Region'] = df_engr_tech['Region'].apply(lambda x: x if x in ['LUZ', 'VIS', 'MIN'] else '')
+                # If Region is empty or not in LUZ/VIS/MIN, set to 'N/A'
+                df_engr_tech['Region'] = df_engr_tech['Region'].apply(
+                    lambda x: x if x in ['LUZ', 'VIS', 'MIN'] else 'N/A'
+                )
                 
         except Exception as e:
             st.warning(f"EngrTech.xlsx error: {e}")
@@ -483,13 +527,10 @@ def create_raawa_file(matching_sites, personnel_list, scope_of_work, start_date,
             st.info(f"🔒 VIS Region detected - Security Approver set to: JOJO A. VIRAY")
         elif region == 'LUZ':
             # For LUZ: No specific security approver defined yet
-            # Keep the template default or set to a placeholder
-            # You can update this when you know who the security approver is for LUZ
             ws["A50"].value = "TBD - Security Approver\nSignature Over Printed Name / Date"
             st.info(f"🔒 LUZ Region detected - Security Approver set to: TBD (Please update when known)")
         else:
             # For MIN and other regions: Keep the template default
-            # The template already has "DIANA BALT" or similar
             pass
         
         # Apply consistent font sizing
@@ -1081,6 +1122,16 @@ else:
                     if 'Region' in df_engr_tech_db.columns:
                         region_list = sorted(df_engr_tech_db['Region'].unique())
                         region_list = [r for r in region_list if str(r).strip() != '']
+                        # Add 'N/A' to region list if it exists
+                        if 'N/A' in region_list:
+                            region_list.remove('N/A')
+                            region_list = ['All Regions'] + ['N/A'] + region_list
+                        else:
+                            region_list = ['All Regions'] + region_list
+                    else:
+                        # If no Region column, show a message
+                        st.info("No Region column found in personnel database")
+                        region_list = ['All Regions']
                     
                     # Filters in columns
                     col_filters = st.columns(3)
@@ -1101,7 +1152,7 @@ else:
                         if region_list:
                             selected_regions = st.multiselect(
                                 "Filter by Region:",
-                                options=['All Regions'] + region_list,
+                                options=region_list,
                                 default=['All Regions'],
                                 key="region_filter_main"
                             )
@@ -1324,6 +1375,13 @@ else:
                     if 'Region' in df_engr_tech_db.columns:
                         region_list = sorted(df_engr_tech_db['Region'].unique())
                         region_list = [r for r in region_list if str(r).strip() != '']
+                        if 'N/A' in region_list:
+                            region_list.remove('N/A')
+                            region_list = ['All Regions'] + ['N/A'] + region_list
+                        else:
+                            region_list = ['All Regions'] + region_list
+                    else:
+                        region_list = ['All Regions']
                     
                     # Filters
                     col_filters = st.columns(3)
@@ -1343,7 +1401,7 @@ else:
                         if region_list:
                             selected_regions = st.multiselect(
                                 "Filter by Region:",
-                                options=['All Regions'] + region_list,
+                                options=region_list,
                                 default=['All Regions'],
                                 key="region_filter_mixed"
                             )
