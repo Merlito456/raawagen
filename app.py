@@ -300,6 +300,9 @@ def load_databases():
             )
             df_req.columns = df_req.columns.str.strip()
             
+            # Show columns for debug
+            st.info(f"Requisitioner columns: {', '.join(df_req.columns.tolist())}")
+            
             if 'Territory no.' in df_req.columns:
                 df_req['Territory no.'] = df_req['Territory no.'].astype(str).str.replace('Territory', '', case=False).str.strip()
             
@@ -654,67 +657,209 @@ def check_conflicts(matching_sites):
         'num_combinations': len(unique_combos)
     }
 
-# --- REQUISITIONER FUNCTION ---
-def get_requisitioner_for_territory_and_project(territory, project, region):
-    """Get requisitioner profile based on territory, project, and region"""
-    if df_req_db is not None and 'Territory no.' in df_req_db.columns:
-        # Try exact match first
-        matching_reqs = df_req_db[
-            (df_req_db['Territory no.'] == territory) &
-            (df_req_db['Project'] == project) &
-            (df_req_db['Region'] == region)
-        ]
+# --- REQUISITIONER SELECTION FUNCTION ---
+def get_requisitioner_selection(req_db):
+    """Display requisitioner selection interface with manual and database options"""
+    
+    # Initialize session state for requisitioner
+    if 'selected_requisitioner' not in st.session_state:
+        st.session_state.selected_requisitioner = {
+            "name": "N/A",
+            "dept": "N/A",
+            "id": "N/A",
+            "contact": "N/A"
+        }
+    
+    if 'req_selection_method' not in st.session_state:
+        st.session_state.req_selection_method = "Auto (Territory-based)"
+    
+    # Requisitioner selection method
+    req_method = st.radio(
+        "Requisitioner Selection Method:",
+        ["Auto (Territory-based)", "Manual Input", "Load from Database", "Mixed (Manual + Database)"],
+        horizontal=True,
+        key="req_method_main"
+    )
+    
+    st.session_state.req_selection_method = req_method
+    
+    # Store selected requisitioner in session state
+    if 'manual_req_name' not in st.session_state:
+        st.session_state.manual_req_name = ""
+    if 'manual_req_dept' not in st.session_state:
+        st.session_state.manual_req_dept = ""
+    if 'manual_req_id' not in st.session_state:
+        st.session_state.manual_req_id = ""
+    if 'manual_req_contact' not in st.session_state:
+        st.session_state.manual_req_contact = ""
+    
+    if req_method == "Manual Input":
+        col1, col2 = st.columns(2)
+        with col1:
+            manual_name = st.text_input("Requisitioner Name:", key="manual_req_name_input")
+            manual_dept = st.text_input("Department/Group:", key="manual_req_dept_input")
+        with col2:
+            manual_id = st.text_input("ID Number:", key="manual_req_id_input")
+            manual_contact = st.text_input("Contact Number:", key="manual_req_contact_input")
         
-        if not matching_reqs.empty:
-            req_row = matching_reqs.iloc[0]
-            return {
-                "name": str(req_row.get("Name", "N/A")),
-                "dept": str(req_row.get("Dept./Group", "N/A")),
-                "id": format_id_number(req_row.get("ID #", "N/A")),
-                "contact": format_contact_number(req_row.get("Contact No.", "N/A"))
-            }
-        
-        # If exact match fails, try partial match
-        if project:
-            base_project = project.split(' - ')[0] if ' - ' in project else project
-            
-            matching_reqs = df_req_db[
-                (df_req_db['Territory no.'] == territory) &
-                (df_req_db['Project'].str.contains(base_project, case=False, na=False)) &
-                (df_req_db['Region'] == region)
-            ]
-            
-            if not matching_reqs.empty:
-                req_row = matching_reqs.iloc[0]
-                return {
-                    "name": str(req_row.get("Name", "N/A")),
-                    "dept": str(req_row.get("Dept./Group", "N/A")),
-                    "id": format_id_number(req_row.get("ID #", "N/A")),
-                    "contact": format_contact_number(req_row.get("Contact No.", "N/A"))
+        if st.button("✅ Set Requisitioner", key="set_manual_req"):
+            if manual_name:
+                st.session_state.selected_requisitioner = {
+                    "name": manual_name,
+                    "dept": manual_dept if manual_dept else "N/A",
+                    "id": format_id_number(manual_id) if manual_id else "N/A",
+                    "contact": format_contact_number(manual_contact) if manual_contact else "N/A"
                 }
-    
-    # Fallback - try without project filter
-    if df_req_db is not None and 'Territory no.' in df_req_db.columns:
-        matching_reqs = df_req_db[
-            (df_req_db['Territory no.'] == territory) &
-            (df_req_db['Region'] == region)
-        ]
+                st.success(f"✅ Requisitioner set to: {manual_name}")
+                st.rerun()
         
-        if not matching_reqs.empty:
-            req_row = matching_reqs.iloc[0]
-            return {
-                "name": str(req_row.get("Name", "N/A")),
-                "dept": str(req_row.get("Dept./Group", "N/A")),
-                "id": format_id_number(req_row.get("ID #", "N/A")),
-                "contact": format_contact_number(req_row.get("Contact No.", "N/A"))
-            }
+        # Show current manual requisitioner
+        if st.session_state.selected_requisitioner["name"] != "N/A":
+            st.info(f"📋 Current Requisitioner: **{st.session_state.selected_requisitioner['name']}**")
     
-    return {
-        "name": f"Territory {territory} Engineer",
-        "dept": f"TERRITORY {territory}",
-        "id": "N/A",
-        "contact": "N/A"
-    }
+    elif req_method == "Load from Database":
+        if req_db is not None and not req_db.empty:
+            # Create searchable dropdown
+            st.subheader("Select from Requisitioner Database")
+            
+            # Create a formatted list for display
+            req_options = []
+            req_dict = {}
+            
+            for idx, row in req_db.iterrows():
+                name = str(row.get('Name', 'N/A'))
+                dept = str(row.get('Dept./Group', 'N/A'))
+                id_num = str(row.get('ID #', 'N/A'))
+                contact = str(row.get('Contact No.', 'N/A'))
+                territory = str(row.get('Territory no.', 'N/A'))
+                region = str(row.get('Region', 'N/A'))
+                project = str(row.get('Project', 'N/A'))
+                
+                display_text = f"{name} - {dept} (Territory: {territory}, Region: {region})"
+                req_options.append(display_text)
+                req_dict[display_text] = {
+                    "name": name,
+                    "dept": dept,
+                    "id": id_num,
+                    "contact": contact,
+                    "territory": territory,
+                    "region": region,
+                    "project": project
+                }
+            
+            # Add search/filter
+            search_term = st.text_input("🔍 Search Requisitioner:", key="req_search")
+            
+            filtered_options = req_options
+            if search_term:
+                filtered_options = [opt for opt in req_options if search_term.lower() in opt.lower()]
+            
+            if filtered_options:
+                selected_option = st.selectbox(
+                    "Select Requisitioner:",
+                    options=filtered_options,
+                    key="req_select"
+                )
+                
+                if st.button("✅ Select Requisitioner", key="set_db_req"):
+                    if selected_option in req_dict:
+                        req_data = req_dict[selected_option]
+                        st.session_state.selected_requisitioner = {
+                            "name": req_data["name"],
+                            "dept": req_data["dept"],
+                            "id": format_id_number(req_data["id"]),
+                            "contact": format_contact_number(req_data["contact"])
+                        }
+                        st.success(f"✅ Requisitioner set to: {req_data['name']}")
+                        st.rerun()
+            else:
+                st.warning("No requisitioners match your search")
+        else:
+            st.warning("No requisitioner database loaded. Please check Requisitioner.xlsx")
+        
+        # Show current requisitioner
+        if st.session_state.selected_requisitioner["name"] != "N/A":
+            st.info(f"📋 Current Requisitioner: **{st.session_state.selected_requisitioner['name']}**")
+    
+    elif req_method == "Mixed (Manual + Database)":
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.subheader("📁 Database Selection")
+            if req_db is not None and not req_db.empty:
+                # Create a formatted list for display
+                req_options = []
+                req_dict = {}
+                
+                for idx, row in req_db.iterrows():
+                    name = str(row.get('Name', 'N/A'))
+                    dept = str(row.get('Dept./Group', 'N/A'))
+                    id_num = str(row.get('ID #', 'N/A'))
+                    contact = str(row.get('Contact No.', 'N/A'))
+                    territory = str(row.get('Territory no.', 'N/A'))
+                    region = str(row.get('Region', 'N/A'))
+                    project = str(row.get('Project', 'N/A'))
+                    
+                    display_text = f"{name} - {dept} (Territory: {territory}, Region: {region})"
+                    req_options.append(display_text)
+                    req_dict[display_text] = {
+                        "name": name,
+                        "dept": dept,
+                        "id": id_num,
+                        "contact": contact,
+                        "territory": territory,
+                        "region": region,
+                        "project": project
+                    }
+                
+                selected_option = st.selectbox(
+                    "Select Requisitioner:",
+                    options=req_options,
+                    key="req_select_mixed"
+                )
+                
+                if st.button("✅ Select from Database", key="set_db_req_mixed"):
+                    if selected_option in req_dict:
+                        req_data = req_dict[selected_option]
+                        st.session_state.selected_requisitioner = {
+                            "name": req_data["name"],
+                            "dept": req_data["dept"],
+                            "id": format_id_number(req_data["id"]),
+                            "contact": format_contact_number(req_data["contact"])
+                        }
+                        st.success(f"✅ Requisitioner set to: {req_data['name']}")
+                        st.rerun()
+            else:
+                st.warning("No requisitioner database loaded")
+        
+        with col2:
+            st.subheader("✏️ Manual Entry")
+            manual_name = st.text_input("Requisitioner Name:", key="manual_req_name_mixed")
+            manual_dept = st.text_input("Department/Group:", key="manual_req_dept_mixed")
+            manual_id = st.text_input("ID Number:", key="manual_req_id_mixed")
+            manual_contact = st.text_input("Contact Number:", key="manual_req_contact_mixed")
+            
+            if st.button("✅ Set Manual Requisitioner", key="set_manual_req_mixed"):
+                if manual_name:
+                    st.session_state.selected_requisitioner = {
+                        "name": manual_name,
+                        "dept": manual_dept if manual_dept else "N/A",
+                        "id": format_id_number(manual_id) if manual_id else "N/A",
+                        "contact": format_contact_number(manual_contact) if manual_contact else "N/A"
+                    }
+                    st.success(f"✅ Requisitioner set to: {manual_name}")
+                    st.rerun()
+        
+        # Show current requisitioner
+        if st.session_state.selected_requisitioner["name"] != "N/A":
+            st.info(f"📋 Current Requisitioner: **{st.session_state.selected_requisitioner['name']}**")
+    
+    else:  # Auto (Territory-based)
+        st.info("ℹ️ Requisitioner will be automatically determined based on Territory, Project, and Region")
+        if st.session_state.selected_requisitioner["name"] != "N/A":
+            st.info(f"📋 Current Requisitioner: **{st.session_state.selected_requisitioner['name']}**")
+    
+    return st.session_state.selected_requisitioner
 
 # --- MAIN APP ---
 # Check files first
@@ -821,10 +966,11 @@ if page == "ℹ️ About & Developer":
     features = [
         ("🏗️ Unlimited Sites", "Select any number of sites from LUZ, VIS, or MIN databases", "✅"),
         ("👥 Personnel Management", "Manual, database, or mixed input modes", "✅"),
+        ("📝 Requisitioner Selection", "Manual, database, or auto territory-based selection", "✅"),
         ("📝 Project & Region Aware", "Filter requisitioners and teams by project/region (LUZ, VIS, MIN)", "✅"),
         ("🏢 Company Filtering", "Select personnel by company with region awareness", "✅"),
         ("📄 Professional Output", "Perfectly formatted Excel with auto font sizing", "✅"),
-        ("🔍 Search & Filter", "Quick personnel search from database", "✅"),
+        ("🔍 Search & Filter", "Quick personnel and requisitioner search from database", "✅"),
         ("💾 Batch Download", "Download multiple RAAWA files at once", "✅"),
         ("🎨 Clean Interface", "User-friendly with professional design", "✅"),
         ("📊 Real-time Preview", "See selected sites and personnel before generation", "✅"),
@@ -933,7 +1079,7 @@ else:
             selected_project = st.selectbox(
                 "Select Project:",
                 options=project_list,
-                help="Choose the project to determine the requisitioner"
+                help="Choose the project for the RAAWA"
             )
         
         with col_region:
@@ -945,6 +1091,14 @@ else:
                 options=['All Regions'] + site_regions,
                 help="Filter sites by region (LUZ, VIS, MIN)"
             )
+        
+        st.markdown("---")
+        
+        # --- STEP 1.5: REQUISITIONER SELECTION ---
+        st.markdown("## 👤 Step 1.5: Requisitioner Selection")
+        st.markdown("Select the requisitioner for this RAAWA (can be manual, from database, or auto)")
+        
+        selected_req_profile = get_requisitioner_selection(df_req_db)
         
         st.markdown("---")
         
@@ -1594,11 +1748,18 @@ else:
                             group_region = group_sites.iloc[0].get('REGION', 'MIN')
                             group_region = group_region if group_region in ['LUZ', 'VIS', 'MIN'] else 'MIN'
                         
-                        req_profile = get_requisitioner_for_territory_and_project(
-                            territory, 
-                            selected_project, 
-                            group_region
-                        )
+                        # Determine which requisitioner to use
+                        # If manual selection is set, use it; otherwise auto-determine
+                        if selected_req_profile["name"] != "N/A" and st.session_state.req_selection_method != "Auto (Territory-based)":
+                            # Use manually selected requisitioner
+                            req_profile = selected_req_profile
+                        else:
+                            # Auto-determine based on territory, project, and region
+                            req_profile = get_requisitioner_for_territory_and_project(
+                                territory, 
+                                selected_project, 
+                                group_region
+                            )
                         
                         buffer = create_raawa_file(
                             group_sites, 
