@@ -176,12 +176,45 @@ def load_databases():
             st.warning(f"MIN database not found: {e}")
             df_min = pd.DataFrame()
         
-        # 2. Load Visayas (VIS) Database
+        # 2. Load Visayas (VIS) Database with specific column mapping
         try:
             df_vis = pd.read_excel(
                 "VIS SKSK Database-03.12.2026.xlsx",
                 dtype=str
             )
+            
+            # Map VIS columns to standard format
+            column_mapping_vis = {
+                'PLAID': 'PLAID',           # Column D
+                'SITENAME': 'SITE',          # Column E
+                'SITE ADDRESS': 'SITE_ADD',  # Column K
+                'Super FO': 'NEW ENGINEER_AH',  # Column I - Facility Manager
+            }
+            
+            # Rename columns if they exist
+            for vis_col, std_col in column_mapping_vis.items():
+                if vis_col in df_vis.columns and std_col not in df_vis.columns:
+                    df_vis.rename(columns={vis_col: std_col}, inplace=True)
+            
+            # Ensure required columns exist for VIS
+            if 'PLAID' not in df_vis.columns:
+                df_vis['PLAID'] = df_vis.index.astype(str)
+            if 'SITE' not in df_vis.columns:
+                df_vis['SITE'] = df_vis.get('SITENAME', 'Unknown Site')
+            if 'SITE_ADD' not in df_vis.columns:
+                df_vis['SITE_ADD'] = df_vis.get('SITE ADDRESS', 'N/A')
+            if 'NEW ENGINEER_AH' not in df_vis.columns:
+                df_vis['NEW ENGINEER_AH'] = df_vis.get('Super FO', 'Unassigned')
+            
+            # Set TERRITORY for VIS (you can adjust this logic)
+            if 'TERRITORY' not in df_vis.columns:
+                # If no territory column, use a default or derive from other data
+                df_vis['TERRITORY'] = '0'
+            
+            # Set CONTACT NUMBER for VIS
+            if 'CONTACT NUMBER' not in df_vis.columns:
+                df_vis['CONTACT NUMBER'] = 'N/A'
+            
             df_vis['REGION'] = 'VIS'
             st.info(f"✅ Loaded VIS database: {len(df_vis)} sites")
         except Exception as e:
@@ -208,13 +241,12 @@ def load_databases():
             st.error("No site databases loaded! Please check your files.")
             df_sites = pd.DataFrame(columns=['PLAID', 'SITE', 'REGION', 'TERRITORY', 'NEW ENGINEER_AH', 'CONTACT NUMBER', 'SITE_ADD'])
         
-        # Standardize column names
-        # Try to find the right columns for each region's database
+        # Standardize column names for all databases
         # Common column names that might exist
         possible_plaid_cols = ['PLAID', 'PLA ID', 'SITE ID', 'Site ID', 'ID']
-        possible_site_cols = ['SITE', 'Site Name', 'SITE NAME', 'Site']
+        possible_site_cols = ['SITE', 'Site Name', 'SITE NAME', 'Site', 'SITENAME']
         possible_territory_cols = ['TERRITORY', 'Territory', 'TERR']
-        possible_fm_cols = ['NEW ENGINEER_AH', 'FM', 'Facility Manager', 'ENGINEER']
+        possible_fm_cols = ['NEW ENGINEER_AH', 'FM', 'Facility Manager', 'ENGINEER', 'Super FO']
         possible_contact_cols = ['CONTACT NUMBER', 'Contact No.', 'CONTACT', 'Phone']
         possible_address_cols = ['SITE_ADD', 'Address', 'SITE ADDRESS', 'Location']
         
@@ -222,22 +254,22 @@ def load_databases():
         for col in df_sites.columns:
             col_upper = col.upper().strip()
             if col_upper in [c.upper() for c in possible_plaid_cols]:
-                if 'PLAID' not in df_sites.columns:
+                if 'PLAID' not in df_sites.columns or df_sites.columns.get_loc('PLAID') != col:
                     df_sites.rename(columns={col: 'PLAID'}, inplace=True)
             elif col_upper in [c.upper() for c in possible_site_cols]:
-                if 'SITE' not in df_sites.columns:
+                if 'SITE' not in df_sites.columns or df_sites.columns.get_loc('SITE') != col:
                     df_sites.rename(columns={col: 'SITE'}, inplace=True)
             elif col_upper in [c.upper() for c in possible_territory_cols]:
-                if 'TERRITORY' not in df_sites.columns:
+                if 'TERRITORY' not in df_sites.columns or df_sites.columns.get_loc('TERRITORY') != col:
                     df_sites.rename(columns={col: 'TERRITORY'}, inplace=True)
             elif col_upper in [c.upper() for c in possible_fm_cols]:
-                if 'NEW ENGINEER_AH' not in df_sites.columns:
+                if 'NEW ENGINEER_AH' not in df_sites.columns or df_sites.columns.get_loc('NEW ENGINEER_AH') != col:
                     df_sites.rename(columns={col: 'NEW ENGINEER_AH'}, inplace=True)
             elif col_upper in [c.upper() for c in possible_contact_cols]:
-                if 'CONTACT NUMBER' not in df_sites.columns:
+                if 'CONTACT NUMBER' not in df_sites.columns or df_sites.columns.get_loc('CONTACT NUMBER') != col:
                     df_sites.rename(columns={col: 'CONTACT NUMBER'}, inplace=True)
             elif col_upper in [c.upper() for c in possible_address_cols]:
-                if 'SITE_ADD' not in df_sites.columns:
+                if 'SITE_ADD' not in df_sites.columns or df_sites.columns.get_loc('SITE_ADD') != col:
                     df_sites.rename(columns={col: 'SITE_ADD'}, inplace=True)
         
         # Ensure required columns exist
@@ -259,6 +291,7 @@ def load_databases():
         df_sites['SITE'] = df_sites['SITE'].astype(str).str.strip()
         df_sites['TERRITORY'] = df_sites['TERRITORY'].astype(str).str.replace('Territory', '', case=False).str.strip()
         df_sites['REGION'] = df_sites['REGION'].astype(str).str.upper().str.strip()
+        df_sites['NEW ENGINEER_AH'] = df_sites['NEW ENGINEER_AH'].astype(str).str.strip()
         
         # Load Requisitioner Database with memory optimization
         df_req = pd.read_excel(
