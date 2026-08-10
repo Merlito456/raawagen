@@ -434,8 +434,6 @@ def load_databases():
         st.error(traceback.format_exc())
         return None, None, None
 
-# --- RAAWA FILE CREATION (FIXED FOR TEMPLATE STRUCTURE) ---
-# --- RAAWA FILE CREATION (USING THE WORKING OLD APPROACH) ---
 # --- RAAWA FILE CREATION (FIXED WITH PROPER MERGED CELL HANDLING) ---
 def create_raawa_file(matching_sites, personnel_list, scope_of_work, start_date, end_date, req_profile, facility_manager, batch_num=1, total_batches=1):
     """Helper function to create a single RAAWA file with dynamic font sizing"""
@@ -491,21 +489,8 @@ def create_raawa_file(matching_sites, personnel_list, scope_of_work, start_date,
         start_personnel_row = 19
         
         def get_font_size(text, min_size=6, max_size=10):
-            if not text or text == '':
-                return max_size
-            text_length = len(str(text))
-            if text_length <= 12:
-                return max_size
-            elif text_length <= 18:
-                return max_size - 1
-            elif text_length <= 25:
-                return max_size - 2
-            elif text_length <= 32:
-                return max_size - 3
-            elif text_length <= 40:
-                return max_size - 4
-            else:
-                return min_size
+            # Always return 6 for Calibri font
+            return 6
         
         # --- SET PERSONNEL WITH MERGED CELL HANDLING ---
         for idx, person in enumerate(personnel_list):
@@ -518,17 +503,17 @@ def create_raawa_file(matching_sites, personnel_list, scope_of_work, start_date,
             # Name - Column 1 or 6
             name_cell = safe_set_cell(row_index, 1 + col_offset, person["name"])
             if name_cell:
-                name_cell.font = Font(name="Calibri", size=get_font_size(person["name"]))
+                name_cell.font = Font(name="Calibri", size=6)
             
             # Company - Column 4 or 9
             company_cell = safe_set_cell(row_index, 4 + col_offset, person["company"])
             if company_cell:
-                company_cell.font = Font(name="Calibri", size=get_font_size(person["company"]))
+                company_cell.font = Font(name="Calibri", size=6)
             
             # ID - Column 5 or 10
             id_cell = safe_set_cell(row_index, 5 + col_offset, formatted_id)
             if id_cell:
-                id_cell.font = Font(name="Calibri", size=get_font_size(formatted_id))
+                id_cell.font = Font(name="Calibri", size=6)
         
         # Hide unused personnel rows
         for r in range(start_personnel_row + (len(personnel_list)//2 + 1), 39):
@@ -560,40 +545,39 @@ def create_raawa_file(matching_sites, personnel_list, scope_of_work, start_date,
         # For LUZ and MIN, keep the template default (DIANALAN BALT)
         
         # --- APPLY FONT SIZING (SKIP MERGED CELLS) ---
-        # Header font
+        # Header font - Calibri 6
         header_font = Font(name="Calibri", size=6, bold=False, italic=False)
         for col_idx in range(1, 12):
             cell = ws.cell(row=1, column=col_idx)
             if cell.coordinate not in ws.merged_cells:
                 cell.font = header_font
         
-        # Personnel font sizing
+        # Personnel font sizing - Calibri 6
         for row in range(start_personnel_row, start_personnel_row + (len(personnel_list)//2 + 1)):
             for col in [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]:
                 cell = ws.cell(row=row, column=col)
                 if cell.coordinate in ws.merged_cells:
                     continue
                 if cell.value and row >= start_personnel_row:
-                    if cell.font and cell.font.size and cell.font.size > 6:
-                        cell.font = Font(name="Calibri", size=6)
-                    elif not cell.font:
-                        cell.font = Font(name="Calibri", size=6)
+                    cell.font = Font(name="Calibri", size=6)
         
-        # Signature font (skip merged cells)
+        # Signature font - Calibri 6 with underline
         sig_font = Font(name="Calibri", size=6, underline="single")
         if ws["A48"].coordinate not in ws.merged_cells:
             ws["A48"].font = sig_font
         if ws["A50"].coordinate not in ws.merged_cells:
             ws["A50"].font = sig_font
         
-        # Apply font sizing to remaining cells
-        for row in range(start_personnel_row, 39):
-            for col in [1, 4, 5, 6, 7, 8, 9, 10, 11]:
+        # Apply Calibri 6 to remaining cells
+        for row in range(2, 55):
+            for col in range(1, 12):
                 cell = ws.cell(row=row, column=col)
                 if cell.coordinate in ws.merged_cells:
                     continue
-                if cell.value and row >= start_personnel_row:
-                    if not cell.font or cell.font.size != 6:
+                if cell.value:
+                    if cell.font and cell.font.size != 6:
+                        cell.font = Font(name="Calibri", size=6)
+                    elif not cell.font:
                         cell.font = Font(name="Calibri", size=6)
         
         buffer = io.BytesIO()
