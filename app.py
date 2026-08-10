@@ -437,6 +437,7 @@ def load_databases():
 # --- RAAWA FILE CREATION (FIXED WITH PROPER MERGED CELL HANDLING) ---
 # --- RAAWA FILE CREATION (FIXED WITH PROPER MERGED CELL HANDLING) ---
 # --- RAAWA FILE CREATION (FIXED WITH PROPER MERGED CELL HANDLING) ---
+# --- RAAWA FILE CREATION (FIXED WITH PROPER MERGED CELL HANDLING) ---
 def create_raawa_file(matching_sites, personnel_list, scope_of_work, start_date, end_date, req_profile, facility_manager, batch_num=1, total_batches=1):
     """Helper function to create a single RAAWA file with dynamic font sizing"""
     try:
@@ -541,9 +542,8 @@ def create_raawa_file(matching_sites, personnel_list, scope_of_work, start_date,
             safe_set_cell(41, 1, scope_of_work)
         
         # --- SET FACILITY MANAGER ---
-        # Add underscore to facility manager name
-        facility_manager_with_underscore = f"{facility_manager}\n_________________________\nSignature Over Printed Name / Date"
-        safe_set_cell(48, 1, facility_manager_with_underscore)
+        # Just set the name - the template already has "Signature Over Printed Name / Date"
+        safe_set_cell(48, 1, facility_manager)
         
         # --- SET SECURITY APPROVER ---
         region = ''
@@ -553,30 +553,24 @@ def create_raawa_file(matching_sites, personnel_list, scope_of_work, start_date,
         
         # Set security approver based on region
         if region == 'VIS':
-            security_approver = "JOJO A. VIRAY\n_________________________\nSignature Over Printed Name / Date"
-            safe_set_cell(50, 1, security_approver)
+            safe_set_cell(50, 1, "JOJO A. VIRAY")
             st.info(f"🔒 VIS Region detected - Security Approver set to: JOJO A. VIRAY")
         elif region == 'LUZ':
-            security_approver = "TBD - Security Approver\n_________________________\nSignature Over Printed Name / Date"
-            safe_set_cell(50, 1, security_approver)
+            safe_set_cell(50, 1, "TBD - Security Approver")
             st.info(f"🔒 LUZ Region detected - Security Approver set to: TBD (Please update when known)")
         # For MIN, keep template default (DIANALAN BALT)
         
         # --- APPLY CALIBRI 6 FONT TO ALL CELLS ---
         calibri_6 = Font(name="Calibri", size=6)
         calibri_6_underline = Font(name="Calibri", size=6, underline="single")
-        calibri_6_bold = Font(name="Calibri", size=6, bold=False, italic=False)
         
         # Apply to all cells in the worksheet
         for row in ws.iter_rows(min_row=1, max_row=ws.max_row, min_col=1, max_col=11):
             for cell in row:
                 if cell.value:
-                    # Check if cell is in signature section (rows 48-55) - apply underline
+                    # Signature section (rows 48-55) - apply underline font
                     if cell.row >= 48 and cell.row <= 55:
                         safe_set_font(cell.row, cell.column, calibri_6_underline)
-                    # Header row (row 1) - bold but not italic
-                    elif cell.row == 1:
-                        safe_set_font(cell.row, cell.column, calibri_6_bold)
                     # All other cells
                     else:
                         safe_set_font(cell.row, cell.column, calibri_6)
