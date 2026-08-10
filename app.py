@@ -1018,6 +1018,7 @@ st.sidebar.markdown("""
 """, unsafe_allow_html=True)
 
 # --- ABOUT PAGE ---
+# --- ABOUT PAGE ---
 if page == "ℹ️ About & Developer":
     st.markdown("""
     <div class="main-header">
@@ -1027,31 +1028,37 @@ if page == "ℹ️ About & Developer":
     </div>
     """, unsafe_allow_html=True)
     
-    col1, col2 = st.columns([1, 2])
-    with col1:
-        st.markdown("""
-        <div class="custom-card" style="text-align: center;">
-            <h2>👨‍💻 Developer</h2>
-            <hr>
-            <h3>John Carlo Rabanes</h3>
-            <p><strong>OLT Rollout Engineer</strong></p>
-            <p>📞 09669343065</p>
-            <p>📧 rabanes.johncarlo4@gmail.com</p>
-            <p>🏢 Nokia Shanghai Bell</p>
+    # Developer and Mission section with dark background
+    st.markdown("""
+    <div style="background: linear-gradient(135deg, #2d3436 0%, #1a1a2e 100%); 
+                padding: 2rem; 
+                border-radius: 15px; 
+                margin: 1rem 0;
+                color: white;">
+        <div style="display: flex; gap: 2rem; flex-wrap: wrap;">
+            <div style="flex: 1; min-width: 250px;">
+                <h2 style="color: #667eea;">👨‍💻 Developer</h2>
+                <hr style="border-color: #667eea;">
+                <h3 style="color: #a29bfe;">John Carlo Rabanes</h3>
+                <p><strong style="color: #fd79a8;">OLT Rollout Engineer</strong></p>
+                <p>📞 09669343065</p>
+                <p>📧 rabanes.johncarlo4@gmail.com</p>
+                <p>🏢 Nokia Shanghai Bell</p>
+            </div>
+            <div style="flex: 1.5; min-width: 300px;">
+                <h2 style="color: #667eea;">🎯 Mission</h2>
+                <hr style="border-color: #667eea;">
+                <p style="font-size: 1.1rem;">To streamline and automate the RAAWA (Request for Authority to Access Work Area) document generation process, reducing manual effort and eliminating errors in multi-site telecommunications infrastructure projects.</p>
+                <br>
+                <h2 style="color: #667eea;">💡 Vision</h2>
+                <hr style="border-color: #667eea;">
+                <p style="font-size: 1.1rem;">To become the standard tool for telecommunications field operations, enabling engineers to generate compliant documentation in minutes instead of hours.</p>
+            </div>
         </div>
-        """, unsafe_allow_html=True)
+    </div>
+    """, unsafe_allow_html=True)
     
-    with col2:
-        st.markdown("""
-        <div class="custom-card">
-            <h2>🎯 Mission</h2>
-            <p>To streamline and automate the RAAWA (Request for Authority to Access Work Area) document generation process, reducing manual effort and eliminating errors in multi-site telecommunications infrastructure projects.</p>
-            <br>
-            <h2>💡 Vision</h2>
-            <p>To become the standard tool for telecommunications field operations, enabling engineers to generate compliant documentation in minutes instead of hours.</p>
-        </div>
-        """, unsafe_allow_html=True)
-    
+    # Key Advantages section
     st.markdown("## 🌟 Key Advantages")
     col1, col2, col3 = st.columns(3)
     
@@ -1064,9 +1071,17 @@ if page == "ℹ️ About & Developer":
     for idx, (title, desc) in enumerate(advantages):
         with [col1, col2, col3][idx]:
             st.markdown(f"""
-            <div class="advantage-box">
-                <h3>{title}</h3>
-                <p>{desc}</p>
+            <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                        padding: 1.5rem;
+                        border-radius: 15px;
+                        margin: 0.5rem 0;
+                        color: white;
+                        min-height: 150px;
+                        display: flex;
+                        flex-direction: column;
+                        justify-content: center;">
+                <h3 style="margin: 0; font-size: 1.3rem;">{title}</h3>
+                <p style="margin: 0.5rem 0 0 0; font-size: 0.95rem; opacity: 0.9;">{desc}</p>
             </div>
             """, unsafe_allow_html=True)
     
@@ -1080,12 +1095,21 @@ if page == "ℹ️ About & Developer":
     for idx, (title, desc) in enumerate(advantages2):
         with [col1, col2, col3][idx]:
             st.markdown(f"""
-            <div class="advantage-box">
-                <h3>{title}</h3>
-                <p>{desc}</p>
+            <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                        padding: 1.5rem;
+                        border-radius: 15px;
+                        margin: 0.5rem 0;
+                        color: white;
+                        min-height: 150px;
+                        display: flex;
+                        flex-direction: column;
+                        justify-content: center;">
+                <h3 style="margin: 0; font-size: 1.3rem;">{title}</h3>
+                <p style="margin: 0.5rem 0 0 0; font-size: 0.95rem; opacity: 0.9;">{desc}</p>
             </div>
             """, unsafe_allow_html=True)
     
+    # Features section with cards
     st.markdown("## ⚡ Features")
     
     features = [
@@ -1107,58 +1131,75 @@ if page == "ℹ️ About & Developer":
         ("🌍 Multi-Region", "Support for LUZ, VIS, and MIN site databases", "✅")
     ]
     
-    for feature in features:
-        st.markdown(f"""
-        <div class="feature-box">
-            <h3>{feature[0]} {feature[2]}</h3>
-            <p>{feature[1]}</p>
-        </div>
-        """, unsafe_allow_html=True)
+    # Display features in a grid
+    for i in range(0, len(features), 2):
+        cols = st.columns(2)
+        for j in range(2):
+            if i + j < len(features):
+                feature = features[i + j]
+                with cols[j]:
+                    st.markdown(f"""
+                    <div style="background: white;
+                                padding: 1rem;
+                                border-radius: 10px;
+                                margin: 0.5rem 0;
+                                border-left: 4px solid #667eea;
+                                box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+                                min-height: 80px;
+                                display: flex;
+                                align-items: center;">
+                        <div>
+                            <h3 style="margin: 0; color: #2d3436; font-size: 1.05rem;">
+                                {feature[0]} <span style="color: #00b894;">{feature[2]}</span>
+                            </h3>
+                            <p style="margin: 0.2rem 0 0 0; color: #636e72; font-size: 0.9rem;">{feature[1]}</p>
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
     
+    # Technology Stack with dark cards
     st.markdown("## 🛠️ Technology Stack")
     tech_col1, tech_col2, tech_col3, tech_col4 = st.columns(4)
     
-    with tech_col1:
-        st.markdown("""
-        <div class="feature-box">
-            <h3>🐍 Python</h3>
-            <p>Core Logic</p>
-        </div>
-        """, unsafe_allow_html=True)
+    tech_stack = [
+        ("🐍 Python", "Core Logic"),
+        ("🎈 Streamlit", "Web Framework"),
+        ("📊 Pandas", "Data Processing"),
+        ("📝 OpenPyXL", "Excel Generation")
+    ]
     
-    with tech_col2:
-        st.markdown("""
-        <div class="feature-box">
-            <h3>🎈 Streamlit</h3>
-            <p>Web Framework</p>
-        </div>
-        """, unsafe_allow_html=True)
+    for idx, (icon, name) in enumerate(tech_stack):
+        with [tech_col1, tech_col2, tech_col3, tech_col4][idx]:
+            st.markdown(f"""
+            <div style="background: linear-gradient(135deg, #2d3436 0%, #1a1a2e 100%);
+                        padding: 1.5rem;
+                        border-radius: 15px;
+                        margin: 0.5rem 0;
+                        color: white;
+                        text-align: center;
+                        min-height: 120px;
+                        display: flex;
+                        flex-direction: column;
+                        justify-content: center;">
+                <h2 style="margin: 0; font-size: 2.5rem;">{icon}</h2>
+                <h3 style="margin: 0.5rem 0 0 0; font-size: 1rem; color: #a29bfe;">{name}</h3>
+            </div>
+            """, unsafe_allow_html=True)
     
-    with tech_col3:
-        st.markdown("""
-        <div class="feature-box">
-            <h3>📊 Pandas</h3>
-            <p>Data Processing</p>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    with tech_col4:
-        st.markdown("""
-        <div class="feature-box">
-            <h3>📝 OpenPyXL</h3>
-            <p>Excel Generation</p>
-        </div>
-        """, unsafe_allow_html=True)
-    
+    # Support & Contact with gradient background
     st.markdown("## 📞 Support & Contact")
     st.markdown("""
-    <div class="info-box">
-        <h3>Need Help?</h3>
-        <p>📧 Email: <a href="mailto:rabanes.johncarlo4@gmail.com">rabanes.johncarlo4@gmail.com</a></p>
+    <div style="background: linear-gradient(135deg, #dfe6e9 0%, #b2bec3 100%);
+                padding: 2rem;
+                border-radius: 15px;
+                margin: 1rem 0;
+                border-left: 4px solid #667eea;">
+        <h3 style="color: #2d3436;">Need Help?</h3>
+        <p>📧 Email: <a href="mailto:rabanes.johncarlo4@gmail.com" style="color: #0984e3; text-decoration: none;">rabanes.johncarlo4@gmail.com</a></p>
         <p>📱 Phone: 09669343065</p>
         <p>🏢 Company: Nokia Shanghai Bell</p>
-        <hr>
-        <p><small>For technical support, feature requests, or bug reports, please reach out via email.</small></p>
+        <hr style="border-color: #636e72;">
+        <p style="font-size: 0.9rem; color: #2d3436;"><small>For technical support, feature requests, or bug reports, please reach out via email.</small></p>
     </div>
     """, unsafe_allow_html=True)
 
