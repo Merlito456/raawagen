@@ -435,6 +435,7 @@ def load_databases():
         return None, None, None
 
 # --- RAAWA FILE CREATION (FIXED WITH PROPER MERGED CELL HANDLING) ---
+# --- RAAWA FILE CREATION (FIXED WITH PROPER MERGED CELL HANDLING) ---
 def create_raawa_file(matching_sites, personnel_list, scope_of_work, start_date, end_date, req_profile, facility_manager, batch_num=1, total_batches=1):
     """Helper function to create a single RAAWA file with dynamic font sizing"""
     try:
@@ -526,11 +527,9 @@ def create_raawa_file(matching_sites, personnel_list, scope_of_work, start_date,
             safe_set_cell(41, 1, scope_of_work)
         
         # --- SET FACILITY MANAGER ---
-        original_signatory = ws["A48"].value
-        if original_signatory:
-            safe_set_cell(48, 1, str(original_signatory).replace("NEW ENGINEER_AH", facility_manager))
-        else:
-            safe_set_cell(48, 1, f"{facility_manager}\nSignature Over Printed Name / Date")
+        # Add underscore to facility manager name
+        facility_manager_with_underscore = f"{facility_manager}\n_________________________\nSignature Over Printed Name / Date"
+        safe_set_cell(48, 1, facility_manager_with_underscore)
         
         # --- SET SECURITY APPROVER (ONLY FOR VIS) ---
         region = ''
@@ -540,9 +539,16 @@ def create_raawa_file(matching_sites, personnel_list, scope_of_work, start_date,
         
         # Only override security approver for VIS region
         if region == 'VIS':
-            safe_set_cell(50, 1, "JOJO A. VIRAY\nSignature Over Printed Name / Date")
+            # Add underscore to JOJO A. VIRAY
+            security_approver = "JOJO A. VIRAY\n_________________________\nSignature Over Printed Name / Date"
+            safe_set_cell(50, 1, security_approver)
             st.info(f"🔒 VIS Region detected - Security Approver set to: JOJO A. VIRAY")
-        # For LUZ and MIN, keep the template default (DIANALAN BALT)
+        elif region == 'LUZ':
+            # For LUZ, keep template default or set to TBD with underscore
+            security_approver = "TBD - Security Approver\n_________________________\nSignature Over Printed Name / Date"
+            safe_set_cell(50, 1, security_approver)
+            st.info(f"🔒 LUZ Region detected - Security Approver set to: TBD (Please update when known)")
+        # For MIN and other regions: Keep the template default
         
         # --- APPLY FONT SIZING (SKIP MERGED CELLS) ---
         # Header font - Calibri 6
