@@ -183,8 +183,43 @@ def load_databases():
                 dtype=str
             )
             
-            # VIS column mapping
-            # Keep original columns, we'll standardize after combining
+            # Store original column names for reference
+            st.info(f"VIS columns: {', '.join(df_vis.columns.tolist())}")
+            
+            # Map VIS columns to standard format - CREATE COPIES of the data
+            # VIS column mapping: AREA, LATITUDE, LONGITUDE, PLAID, SITENAME, WIRELINE_NAME (NMS NAMES), ASSIGN_CITY/MUNICIPALITY, Hub, Super FO, Area Head, Site Address
+            
+            # Copy data to standard columns
+            if 'PLAID' in df_vis.columns:
+                df_vis['PLAID'] = df_vis['PLAID']
+            else:
+                df_vis['PLAID'] = df_vis.index.astype(str)
+            
+            if 'SITENAME' in df_vis.columns:
+                df_vis['SITE'] = df_vis['SITENAME']
+            else:
+                df_vis['SITE'] = 'Unknown Site'
+            
+            if 'Site Address' in df_vis.columns:
+                df_vis['SITE_ADD'] = df_vis['Site Address']
+            elif 'SITE ADDRESS' in df_vis.columns:
+                df_vis['SITE_ADD'] = df_vis['SITE ADDRESS']
+            else:
+                df_vis['SITE_ADD'] = 'N/A'
+            
+            if 'Super FO' in df_vis.columns:
+                df_vis['NEW ENGINEER_AH'] = df_vis['Super FO']
+            else:
+                df_vis['NEW ENGINEER_AH'] = 'Unassigned'
+            
+            # Set TERRITORY for VIS - use a default or derive from other data
+            if 'TERRITORY' not in df_vis.columns:
+                df_vis['TERRITORY'] = '0'
+            
+            # Set CONTACT NUMBER for VIS
+            if 'CONTACT NUMBER' not in df_vis.columns:
+                df_vis['CONTACT NUMBER'] = 'N/A'
+            
             df_vis['REGION'] = 'VIS'
             st.info(f"✅ Loaded VIS database: {len(df_vis)} sites")
         except Exception as e:
@@ -212,114 +247,13 @@ def load_databases():
             df_sites = pd.DataFrame(columns=['PLAID', 'SITE', 'REGION', 'TERRITORY', 'NEW ENGINEER_AH', 'CONTACT NUMBER', 'SITE_ADD'])
             return df_sites, None, None
         
-        # --- STANDARDIZE COLUMN NAMES BY REGION ---
-        
-        # Create a new standardized dataframe
-        df_standardized = pd.DataFrame()
-        
-        # Define column mappings for each region
-        # MIN columns are already standard: PLAID, SITE, TERRITORY, NEW ENGINEER_AH, CONTACT NUMBER, SITE_ADD
-        
-        # VIS column mapping
-        vis_mapping = {
-            'PLAID': 'PLAID',           # Column D
-            'SITENAME': 'SITE',          # Column E
-            'SITE ADDRESS': 'SITE_ADD',  # Column K
-            'Super FO': 'NEW ENGINEER_AH',  # Column I - Facility Manager
-        }
-        
-        # Process each region separately to handle different column names
-        for region in df_sites['REGION'].unique():
-            region_df = df_sites[df_sites['REGION'] == region].copy()
-            
-            if region == 'MIN':
-                # MIN already has standard columns, just copy
-                df_standardized = pd.concat([df_standardized, region_df], ignore_index=True)
-                
-            elif region == 'VIS':
-                # Map VIS columns to standard names
-                for vis_col, std_col in vis_mapping.items():
-                    if vis_col in region_df.columns and std_col not in region_df.columns:
-                        region_df[std_col] = region_df[vis_col]
-                
-                # Ensure required columns exist for VIS
-                if 'PLAID' not in region_df.columns:
-                    region_df['PLAID'] = region_df.index.astype(str)
-                if 'SITE' not in region_df.columns:
-                    region_df['SITE'] = region_df.get('SITENAME', 'Unknown Site')
-                if 'SITE_ADD' not in region_df.columns:
-                    region_df['SITE_ADD'] = region_df.get('SITE ADDRESS', 'N/A')
-                if 'NEW ENGINEER_AH' not in region_df.columns:
-                    region_df['NEW ENGINEER_AH'] = region_df.get('Super FO', 'Unassigned')
-                if 'TERRITORY' not in region_df.columns:
-                    region_df['TERRITORY'] = '0'
-                if 'CONTACT NUMBER' not in region_df.columns:
-                    region_df['CONTACT NUMBER'] = 'N/A'
-                
-                # Clean up
-                region_df['REGION'] = 'VIS'
-                df_standardized = pd.concat([df_standardized, region_df], ignore_index=True)
-                
-            elif region == 'LUZ':
-                # For LUZ, we need to handle its specific column names
-                # Try to map common LUZ column names
-                luz_plaid_cols = ['PLAID', 'PLA ID', 'SITE ID', 'ID']
-                luz_site_cols = ['SITE', 'SITE NAME', 'Site Name', 'SITENAME']
-                luz_territory_cols = ['TERRITORY', 'TERR', 'Territory']
-                luz_fm_cols = ['NEW ENGINEER_AH', 'FM', 'Facility Manager', 'ENGINEER']
-                luz_contact_cols = ['CONTACT NUMBER', 'CONTACT', 'Phone']
-                luz_address_cols = ['SITE_ADD', 'ADDRESS', 'SITE ADDRESS']
-                
-                # Try to find and map columns
-                for col in region_df.columns:
-                    col_upper = col.upper().strip()
-                    if col_upper in [c.upper() for c in luz_plaid_cols]:
-                        if 'PLAID' not in region_df.columns:
-                            region_df.rename(columns={col: 'PLAID'}, inplace=True)
-                    elif col_upper in [c.upper() for c in luz_site_cols]:
-                        if 'SITE' not in region_df.columns:
-                            region_df.rename(columns={col: 'SITE'}, inplace=True)
-                    elif col_upper in [c.upper() for c in luz_territory_cols]:
-                        if 'TERRITORY' not in region_df.columns:
-                            region_df.rename(columns={col: 'TERRITORY'}, inplace=True)
-                    elif col_upper in [c.upper() for c in luz_fm_cols]:
-                        if 'NEW ENGINEER_AH' not in region_df.columns:
-                            region_df.rename(columns={col: 'NEW ENGINEER_AH'}, inplace=True)
-                    elif col_upper in [c.upper() for c in luz_contact_cols]:
-                        if 'CONTACT NUMBER' not in region_df.columns:
-                            region_df.rename(columns={col: 'CONTACT NUMBER'}, inplace=True)
-                    elif col_upper in [c.upper() for c in luz_address_cols]:
-                        if 'SITE_ADD' not in region_df.columns:
-                            region_df.rename(columns={col: 'SITE_ADD'}, inplace=True)
-                
-                # Ensure required columns exist for LUZ
-                if 'PLAID' not in region_df.columns:
-                    region_df['PLAID'] = region_df.index.astype(str)
-                if 'SITE' not in region_df.columns:
-                    region_df['SITE'] = 'Unknown Site'
-                if 'TERRITORY' not in region_df.columns:
-                    region_df['TERRITORY'] = '0'
-                if 'NEW ENGINEER_AH' not in region_df.columns:
-                    region_df['NEW ENGINEER_AH'] = 'Unassigned'
-                if 'CONTACT NUMBER' not in region_df.columns:
-                    region_df['CONTACT NUMBER'] = 'N/A'
-                if 'SITE_ADD' not in region_df.columns:
-                    region_df['SITE_ADD'] = 'N/A'
-                
-                # Clean up
-                region_df['REGION'] = 'LUZ'
-                df_standardized = pd.concat([df_standardized, region_df], ignore_index=True)
-        
-        # Use the standardized dataframe
-        df_sites = df_standardized
-        
         # Ensure all required columns exist
         required_cols = ['PLAID', 'SITE', 'REGION', 'TERRITORY', 'NEW ENGINEER_AH', 'CONTACT NUMBER', 'SITE_ADD']
         for col in required_cols:
             if col not in df_sites.columns:
                 df_sites[col] = 'N/A'
         
-        # Clean up data - only if columns exist and are string type
+        # Clean up data - only if columns exist
         if 'PLAID' in df_sites.columns:
             df_sites['PLAID'] = df_sites['PLAID'].astype(str).str.strip()
         if 'SITE' in df_sites.columns:
