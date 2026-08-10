@@ -141,7 +141,9 @@ def check_required_files():
         "Globe FO Engr Conatct_Vendor.xlsx",
         "Requisitioner.xlsx",
         "EngrTech.xlsx",
-        "MIN591__MANUAL RAAWA_APPLICATION_June8,2026.xlsx"
+        "MIN591__MANUAL RAAWA_APPLICATION_June8,2026.xlsx",
+        "VIS SKSK Database-03.12.2026.xlsx",
+        "ROGMA Unified SKSK DB for Sharing (1).xlsx"
     ]
     
     missing_files = []
@@ -159,19 +161,92 @@ def check_required_files():
 @st.cache_data
 def load_databases():
     try:
-        # Load Main Site Database with memory optimization
-        df_sites = pd.read_excel(
+        # --- LOAD SITE DATABASES FOR ALL REGIONS ---
+        
+        # 1. Load Mindanao (MIN) Database
+        df_min = pd.read_excel(
             "Globe FO Engr Conatct_Vendor.xlsx", 
             sheet_name="MIN",
             dtype=str
         )
+        df_min['REGION'] = 'MIN'
         
+        # 2. Load Visayas (VIS) Database
+        try:
+            df_vis = pd.read_excel(
+                "VIS SKSK Database-03.12.2026.xlsx",
+                dtype=str
+            )
+            df_vis['REGION'] = 'VIS'
+        except Exception as e:
+            st.warning(f"VIS database not found or error loading: {e}")
+            df_vis = pd.DataFrame()
+        
+        # 3. Load Luzon (LUZ) Database
+        try:
+            df_luz = pd.read_excel(
+                "ROGMA Unified SKSK DB for Sharing (1).xlsx",
+                dtype=str
+            )
+            df_luz['REGION'] = 'LUZ'
+        except Exception as e:
+            st.warning(f"LUZ database not found or error loading: {e}")
+            df_luz = pd.DataFrame()
+        
+        # Combine all site databases
+        df_sites = pd.concat([df_min, df_vis, df_luz], ignore_index=True)
+        
+        # Standardize column names
+        # Try to find the right columns for each region's database
+        # Common column names that might exist
+        possible_plaid_cols = ['PLAID', 'PLA ID', 'SITE ID', 'Site ID', 'ID']
+        possible_site_cols = ['SITE', 'Site Name', 'SITE NAME', 'Site']
+        possible_territory_cols = ['TERRITORY', 'Territory', 'TERR']
+        possible_fm_cols = ['NEW ENGINEER_AH', 'FM', 'Facility Manager', 'ENGINEER']
+        possible_contact_cols = ['CONTACT NUMBER', 'Contact No.', 'CONTACT', 'Phone']
+        possible_address_cols = ['SITE_ADD', 'Address', 'SITE ADDRESS', 'Location']
+        
+        # Rename columns if they exist
+        for col in df_sites.columns:
+            col_upper = col.upper().strip()
+            if col_upper in [c.upper() for c in possible_plaid_cols]:
+                if 'PLAID' not in df_sites.columns:
+                    df_sites.rename(columns={col: 'PLAID'}, inplace=True)
+            elif col_upper in [c.upper() for c in possible_site_cols]:
+                if 'SITE' not in df_sites.columns:
+                    df_sites.rename(columns={col: 'SITE'}, inplace=True)
+            elif col_upper in [c.upper() for c in possible_territory_cols]:
+                if 'TERRITORY' not in df_sites.columns:
+                    df_sites.rename(columns={col: 'TERRITORY'}, inplace=True)
+            elif col_upper in [c.upper() for c in possible_fm_cols]:
+                if 'NEW ENGINEER_AH' not in df_sites.columns:
+                    df_sites.rename(columns={col: 'NEW ENGINEER_AH'}, inplace=True)
+            elif col_upper in [c.upper() for c in possible_contact_cols]:
+                if 'CONTACT NUMBER' not in df_sites.columns:
+                    df_sites.rename(columns={col: 'CONTACT NUMBER'}, inplace=True)
+            elif col_upper in [c.upper() for c in possible_address_cols]:
+                if 'SITE_ADD' not in df_sites.columns:
+                    df_sites.rename(columns={col: 'SITE_ADD'}, inplace=True)
+        
+        # Ensure required columns exist
+        if 'PLAID' not in df_sites.columns:
+            df_sites['PLAID'] = df_sites.index.astype(str)
+        if 'SITE' not in df_sites.columns:
+            df_sites['SITE'] = 'Unknown Site'
+        if 'TERRITORY' not in df_sites.columns:
+            df_sites['TERRITORY'] = '0'
+        if 'NEW ENGINEER_AH' not in df_sites.columns:
+            df_sites['NEW ENGINEER_AH'] = 'Unassigned'
+        if 'CONTACT NUMBER' not in df_sites.columns:
+            df_sites['CONTACT NUMBER'] = 'N/A'
+        if 'SITE_ADD' not in df_sites.columns:
+            df_sites['SITE_ADD'] = 'N/A'
+        
+        # Clean up data
         df_sites['PLAID'] = df_sites['PLAID'].astype(str).str.strip()
+        df_sites['SITE'] = df_sites['SITE'].astype(str).str.strip()
         df_sites['TERRITORY'] = df_sites['TERRITORY'].astype(str).str.replace('Territory', '', case=False).str.strip()
-        
-        if 'REGION' in df_sites.columns:
-            df_sites['REGION'] = df_sites['REGION'].astype(str).str.upper().str.strip()
-            df_sites['REGION'] = df_sites['REGION'].apply(lambda x: x if x in ['LUZ', 'VIS', 'MIN'] else 'MIN')
+        df_sites['REGION'] = df_sites['REGION'].astype(str).str.upper().str.strip()
         
         # Load Requisitioner Database with memory optimization
         df_req = pd.read_excel(
@@ -550,9 +625,9 @@ page = st.sidebar.radio(
 st.sidebar.markdown("---")
 st.sidebar.markdown("""
 <div style="text-align: center; padding: 1rem;">
-    <small>Version 2.3.0</small><br>
+    <small>Version 3.0.0</small><br>
     <small>© 2026 RAAWA Generator</small><br>
-    <small>✨ Region Aware (LUZ, VIS, MIN)</small>
+    <small>✨ Multi-Region Support (LUZ, VIS, MIN)</small>
 </div>
 """, unsafe_allow_html=True)
 
@@ -562,6 +637,7 @@ if page == "ℹ️ About & Developer":
     <div class="main-header">
         <h1>📄 About RAAWA Generator</h1>
         <p>Professional Multi-Site RAAWA Document Automation System</p>
+        <p><strong>🌍 Now with LUZ, VIS, and MIN Database Support!</strong></p>
     </div>
     """, unsafe_allow_html=True)
     
@@ -611,7 +687,7 @@ if page == "ℹ️ About & Developer":
     col1, col2, col3 = st.columns(3)
     advantages2 = [
         ("🔄 Auto-Routing", "Automatic requisitioner mapping based on territory"),
-        ("📁 Database Integration", "Load personnel from Excel database with search"),
+        ("📁 Multi-Region DB", "Load sites from LUZ, VIS, and MIN databases"),
         ("🔒 Smart Batching", "Auto-splits into multiple RAAWAs when exceeding 10 sites")
     ]
     
@@ -627,7 +703,7 @@ if page == "ℹ️ About & Developer":
     st.markdown("## ⚡ Features")
     
     features = [
-        ("🏗️ Unlimited Sites", "Select any number of sites from database with auto-batching", "✅"),
+        ("🏗️ Unlimited Sites", "Select any number of sites from LUZ, VIS, or MIN databases", "✅"),
         ("👥 Personnel Management", "Manual, database, or mixed input modes", "✅"),
         ("📝 Project & Region Aware", "Filter requisitioners and teams by project/region (LUZ, VIS, MIN)", "✅"),
         ("🏢 Company Filtering", "Select personnel by company with region awareness", "✅"),
@@ -640,7 +716,8 @@ if page == "ℹ️ About & Developer":
         ("📑 Auto-Batching", "Automatically splits into 10-site batches per signatory group", "✅"),
         ("📅 Flexible Dates", "Choose start date manually or use current date", "✅"),
         ("📞 Auto-Format Contact", "Automatically formats contact numbers to start with 0", "✅"),
-        ("🆔 Clean ID Numbers", "Removes decimal places from ID numbers", "✅")
+        ("🆔 Clean ID Numbers", "Removes decimal places from ID numbers", "✅"),
+        ("🌍 Multi-Region", "Support for LUZ, VIS, and MIN site databases", "✅")
     ]
     
     for feature in features:
@@ -705,9 +782,23 @@ else:
         <div class="main-header">
             <h1>📄 Automated Multi-Site RAAWA Generator</h1>
             <p>Select any number of sites, populate the personnel manifest, and generate perfectly styled RAAWA forms instantly.<br>
-            <strong>✨ Region Aware (LUZ, VIS, MIN) - Auto-batches into groups of 10 per signatory</strong></p>
+            <strong>🌍 Multi-Region (LUZ, VIS, MIN) - Auto-batches into groups of 10 per signatory</strong></p>
         </div>
         """, unsafe_allow_html=True)
+        
+        # --- Display Database Statistics ---
+        with st.expander("📊 Database Statistics", expanded=False):
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                min_count = len(df_db[df_db['REGION'] == 'MIN']) if 'REGION' in df_db.columns else 0
+                st.metric("🗺️ MIN Sites", min_count)
+            with col2:
+                vis_count = len(df_db[df_db['REGION'] == 'VIS']) if 'REGION' in df_db.columns else 0
+                st.metric("🗺️ VIS Sites", vis_count)
+            with col3:
+                luz_count = len(df_db[df_db['REGION'] == 'LUZ']) if 'REGION' in df_db.columns else 0
+                st.metric("🗺️ LUZ Sites", luz_count)
+            st.caption(f"Total Sites: {len(df_db)}")
         
         # --- STEP 1: PROJECT & REGION SELECTION ---
         st.markdown("## 📋 Step 1: Project & Region Configuration")
