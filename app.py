@@ -434,7 +434,7 @@ def load_databases():
         st.error(traceback.format_exc())
         return None, None, None
 
-# --- RAAWA FILE CREATION (FIXED) ---
+# --- RAAWA FILE CREATION (FIXED FOR TEMPLATE STRUCTURE) ---
 def create_raawa_file(matching_sites, personnel_list, scope_of_work, start_date, end_date, req_profile, facility_manager, batch_num=1, total_batches=1):
     """Helper function to create a single RAAWA file with dynamic font sizing"""
     try:
@@ -443,31 +443,36 @@ def create_raawa_file(matching_sites, personnel_list, scope_of_work, start_date,
         ws = wb.active 
         
         # --- SET REQUISITIONER DETAILS ---
+        # Row 3: Name/Position
         ws["D3"].value = req_profile["name"]
+        # Row 4: Dept./Group
         ws["D4"].value = req_profile["dept"]
+        # Row 4: ID #
+        ws["G4"].value = format_id_number(req_profile["id"])
+        # Row 4: HP Contact No
+        ws["J4"].value = format_contact_number(req_profile["contact"])
         
-        id_value = format_id_number(req_profile["id"])
-        ws["G4"].value = id_value
-        
-        contact_value = format_contact_number(req_profile["contact"])
-        ws["J4"].value = contact_value
-        
-        # --- SET SITES ---
+        # --- SET SITES (Rows 6-15) ---
         base_site_row = 6
         num_sites = len(matching_sites)
         for idx, (_, row) in enumerate(matching_sites.iterrows()):
             curr_row = base_site_row + idx
+            # Column A: Site Name
             ws.cell(row=curr_row, column=1, value=f"{row.get('PLAID', '')} - {row.get('SITE', '')}")
+            # Column D: Complete Address
             ws.cell(row=curr_row, column=4, value=row.get("SITE_ADD", "N/A"))
         
         # Hide unused site rows
         for r in range(base_site_row + num_sites, 16):
             ws.row_dimensions[r].hidden = True
         
-        # --- SET DATES ---
+        # --- SET DATES (Row 17) ---
+        # Column D: From Date
         ws["D17"].value = start_date.strftime("%Y-%m-%d")
+        # Column E: To Date
         ws["E17"].value = end_date.strftime("%Y-%m-%d")
         
+        # --- SET PERSONNEL (Rows 19-38) ---
         start_personnel_row = 19
         
         def get_font_size(text, min_size=6, max_size=10):
@@ -487,51 +492,44 @@ def create_raawa_file(matching_sites, personnel_list, scope_of_work, start_date,
             else:
                 return min_size
         
-        # --- SET PERSONNEL ---
-        # Personnel are in two columns: Column 1-5 (left) and Column 6-11 (right)
-        # Each person uses 3 cells: Name (col 1 or 6), Company (col 4 or 9), ID (col 5 or 10)
+        # Personnel layout: Two columns per row
+        # Left side: Name (Col 1), Company (Col 4), ID No (Col 5)
+        # Right side: Name (Col 6), Company (Col 9), ID No (Col 10)
         for idx, person in enumerate(personnel_list):
             row_index = start_personnel_row + (idx // 2)
             col_offset = 0 if idx % 2 == 0 else 5
             
             formatted_id = format_id_number(person["id_no"])
             
-            # Name - Column 1 or 6
-            name_cell = ws.cell(row=row_index, column=1 + col_offset)
-            name_cell.value = person["name"]
-            name_cell.font = Font(name="Calibri", size=get_font_size(person["name"]))
+            # Name
+            ws.cell(row=row_index, column=1 + col_offset).value = person["name"]
+            ws.cell(row=row_index, column=1 + col_offset).font = Font(name="Calibri", size=get_font_size(person["name"]))
             
-            # Company - Column 4 or 9
-            company_cell = ws.cell(row=row_index, column=4 + col_offset)
-            company_cell.value = person["company"]
-            company_cell.font = Font(name="Calibri", size=get_font_size(person["company"]))
+            # Company
+            ws.cell(row=row_index, column=4 + col_offset).value = person["company"]
+            ws.cell(row=row_index, column=4 + col_offset).font = Font(name="Calibri", size=get_font_size(person["company"]))
             
-            # ID - Column 5 or 10
-            id_cell = ws.cell(row=row_index, column=5 + col_offset)
-            id_cell.value = formatted_id
-            id_cell.font = Font(name="Calibri", size=get_font_size(formatted_id))
+            # ID No
+            ws.cell(row=row_index, column=5 + col_offset).value = formatted_id
+            ws.cell(row=row_index, column=5 + col_offset).font = Font(name="Calibri", size=get_font_size(formatted_id))
         
         # Hide unused personnel rows
         for r in range(start_personnel_row + (len(personnel_list)//2 + 1), 39):
             ws.row_dimensions[r].hidden = True
         
-        # --- SET SCOPE OF WORK ---
-        # A41 is merged, write to the top-left cell
+        # --- SET SCOPE OF WORK (Row 41) ---
+        # A41 is the start of the nature of access section
         if total_batches > 1:
             ws["A41"].value = f"{scope_of_work}\n\n(Page {batch_num} of {total_batches} for this location group)"
         else:
             ws["A41"].value = scope_of_work
         
-        # --- SET FACILITY MANAGER ---
-        # A48 is merged, write to the top-left cell
-        original_signatory = ws["A48"].value
-        if original_signatory:
-            ws["A48"].value = str(original_signatory).replace("NEW ENGINEER_AH", facility_manager)
-        else:
-            ws["A48"].value = f"{facility_manager}\nSignature Over Printed Name / Date"
+        # --- SET FACILITY MANAGER (Row 48) ---
+        # A48 is "NEW ENGINEER_AH"
+        ws["A48"].value = f"{facility_manager}\nSignature Over Printed Name / Date"
         
-        # --- SET SECURITY APPROVER ---
-        # A50 is merged, write to the top-left cell
+        # --- SET SECURITY APPROVER (Row 50) ---
+        # A50 is the security approver
         region = ''
         if not matching_sites.empty:
             first_site = matching_sites.iloc[0]
@@ -543,45 +541,25 @@ def create_raawa_file(matching_sites, personnel_list, scope_of_work, start_date,
         elif region == 'LUZ':
             ws["A50"].value = "TBD - Security Approver\nSignature Over Printed Name / Date"
         else:
-            # For MIN and other regions: Keep the template default
+            # For MIN and other regions: Keep the template default (DIANALAN BALT)
             pass
         
-        # --- APPLY FONT SIZING ---
-        # Header font
-        header_font = Font(name="Calibri", size=6, bold=False, italic=False)
-        for col_idx in range(1, 12):
-            cell = ws.cell(row=1, column=col_idx)
-            if cell.coordinate not in ws.merged_cells:
-                cell.font = header_font
-        
-        # Personnel font sizing
-        for row in range(start_personnel_row, start_personnel_row + (len(personnel_list)//2 + 1)):
-            for col in [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]:
+        # --- APPLY FONT FORMATTING ---
+        # Set font size for all cells to 6 where needed
+        for row in range(1, 55):
+            for col in range(1, 12):
                 cell = ws.cell(row=row, column=col)
-                if cell.coordinate in ws.merged_cells:
-                    continue
-                if cell.value and row >= start_personnel_row:
-                    if cell.font and cell.font.size and cell.font.size > 6:
+                if cell.value and cell.font:
+                    # Keep the font family but set size to 6 if it's larger
+                    if cell.font.size and cell.font.size > 6:
                         cell.font = Font(name="Calibri", size=6)
-                    elif not cell.font:
-                        cell.font = Font(name="Calibri", size=6)
+                elif cell.value and not cell.font:
+                    cell.font = Font(name="Calibri", size=6)
         
-        # Signature font
+        # Set signature font (underline)
         sig_font = Font(name="Calibri", size=6, underline="single")
-        if ws["A48"].coordinate not in ws.merged_cells:
-            ws["A48"].font = sig_font
-        if ws["A50"].coordinate not in ws.merged_cells:
-            ws["A50"].font = sig_font
-        
-        # Apply font sizing to remaining cells
-        for row in range(start_personnel_row, 39):
-            for col in [1, 4, 5, 6, 7, 8, 9, 10, 11]:
-                cell = ws.cell(row=row, column=col)
-                if cell.coordinate in ws.merged_cells:
-                    continue
-                if cell.value and row >= start_personnel_row:
-                    if not cell.font or cell.font.size != 6:
-                        cell.font = Font(name="Calibri", size=6)
+        ws["A48"].font = sig_font
+        ws["A50"].font = sig_font
         
         buffer = io.BytesIO()
         wb.save(buffer)
