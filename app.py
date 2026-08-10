@@ -442,46 +442,33 @@ def create_raawa_file(matching_sites, personnel_list, scope_of_work, start_date,
         wb = openpyxl.load_workbook(template_file)
         ws = wb.active 
         
-        # Function to safely set cell value (skip merged cells)
-        def safe_set_cell(row, col, value):
-            cell = ws.cell(row=row, column=col)
-            if cell.coordinate not in ws.merged_cells:
-                cell.value = value
-                return cell
-            return None
-        
-        # Function to safely set cell font (skip merged cells)
-        def safe_set_font(row, col, font):
-            cell = ws.cell(row=row, column=col)
-            if cell.coordinate not in ws.merged_cells:
-                cell.font = font
-                return True
-            return False
-        
-        # Set requisitioner details
-        safe_set_cell(3, 4, req_profile["name"])  # D3
-        safe_set_cell(4, 4, req_profile["dept"])  # D4
+        # --- SET REQUISITIONER DETAILS ---
+        # D3, D4, G4, J4 are individual cells (not merged)
+        ws["D3"].value = req_profile["name"]
+        ws["D4"].value = req_profile["dept"]
         
         id_value = format_id_number(req_profile["id"])
-        safe_set_cell(4, 7, id_value)  # G4
+        ws["G4"].value = id_value
         
         contact_value = format_contact_number(req_profile["contact"])
-        safe_set_cell(4, 10, contact_value)  # J4
+        ws["J4"].value = contact_value
         
-        # Set sites
+        # --- SET SITES ---
         base_site_row = 6
         num_sites = len(matching_sites)
         for idx, (_, row) in enumerate(matching_sites.iterrows()):
             curr_row = base_site_row + idx
-            safe_set_cell(curr_row, 1, f"{row.get('PLAID', '')} - {row.get('SITE', '')}")
-            safe_set_cell(curr_row, 4, row.get("SITE_ADD", "N/A"))
+            ws.cell(row=curr_row, column=1, value=f"{row.get('PLAID', '')} - {row.get('SITE', '')}")
+            ws.cell(row=curr_row, column=4, value=row.get("SITE_ADD", "N/A"))
         
+        # Hide unused site rows
         for r in range(base_site_row + num_sites, 16):
             ws.row_dimensions[r].hidden = True
         
-        # Set dates
-        safe_set_cell(17, 4, start_date.strftime("%Y-%m-%d"))  # D17
-        safe_set_cell(17, 5, end_date.strftime("%Y-%m-%d"))    # E17
+        # --- SET DATES ---
+        # D17 and E17 are individual cells
+        ws["D17"].value = start_date.strftime("%Y-%m-%d")
+        ws["E17"].value = end_date.strftime("%Y-%m-%d")
         
         start_personnel_row = 19
         
@@ -502,7 +489,9 @@ def create_raawa_file(matching_sites, personnel_list, scope_of_work, start_date,
             else:
                 return min_size
         
-        # Set personnel with merged cell checking
+        # --- SET PERSONNEL ---
+        # Personnel are in two columns: Column 1-5 (left) and Column 6-11 (right)
+        # Each person uses 3 cells: Name (col 1 or 6), Company (col 4 or 9), ID (col 5 or 10)
         for idx, person in enumerate(personnel_list):
             row_index = start_personnel_row + (idx // 2)
             col_offset = 0 if idx % 2 == 0 else 5
@@ -510,37 +499,44 @@ def create_raawa_file(matching_sites, personnel_list, scope_of_work, start_date,
             formatted_id = format_id_number(person["id_no"])
             
             # Name
-            name_cell = safe_set_cell(row_index, 1 + col_offset, person["name"])
-            if name_cell:
+            name_cell = ws.cell(row=row_index, column=1 + col_offset)
+            if name_cell.coordinate not in ws.merged_cells:
+                name_cell.value = person["name"]
                 name_cell.font = Font(name="Calibri", size=get_font_size(person["name"]))
             
             # Company
-            company_cell = safe_set_cell(row_index, 4 + col_offset, person["company"])
-            if company_cell:
+            company_cell = ws.cell(row=row_index, column=4 + col_offset)
+            if company_cell.coordinate not in ws.merged_cells:
+                company_cell.value = person["company"]
                 company_cell.font = Font(name="Calibri", size=get_font_size(person["company"]))
             
             # ID
-            id_cell = safe_set_cell(row_index, 5 + col_offset, formatted_id)
-            if id_cell:
+            id_cell = ws.cell(row=row_index, column=5 + col_offset)
+            if id_cell.coordinate not in ws.merged_cells:
+                id_cell.value = formatted_id
                 id_cell.font = Font(name="Calibri", size=get_font_size(formatted_id))
         
+        # Hide unused personnel rows
         for r in range(start_personnel_row + (len(personnel_list)//2 + 1), 39):
             ws.row_dimensions[r].hidden = True
         
-        # --- SET SCOPE OF WORK (A41 is merged) ---
+        # --- SET SCOPE OF WORK ---
+        # A41 is merged, but we can write to A41 (top-left cell of merged range)
         if total_batches > 1:
-            safe_set_cell(41, 1, f"{scope_of_work}\n\n(Page {batch_num} of {total_batches} for this location group)")
+            ws["A41"].value = f"{scope_of_work}\n\n(Page {batch_num} of {total_batches} for this location group)"
         else:
-            safe_set_cell(41, 1, scope_of_work)
+            ws["A41"].value = scope_of_work
         
-        # --- SET FACILITY MANAGER (A48 is merged) ---
+        # --- SET FACILITY MANAGER ---
+        # A48 is merged, write to A48 (top-left cell)
         original_signatory = ws["A48"].value
         if original_signatory:
-            safe_set_cell(48, 1, str(original_signatory).replace("NEW ENGINEER_AH", facility_manager))
+            ws["A48"].value = str(original_signatory).replace("NEW ENGINEER_AH", facility_manager)
         else:
-            safe_set_cell(48, 1, f"{facility_manager}\nSignature Over Printed Name / Date")
+            ws["A48"].value = f"{facility_manager}\nSignature Over Printed Name / Date"
         
-        # --- SET SECURITY APPROVER (A50 is merged) ---
+        # --- SET SECURITY APPROVER ---
+        # A50 is merged, write to A50 (top-left cell)
         region = ''
         if not matching_sites.empty:
             first_site = matching_sites.iloc[0]
@@ -548,10 +544,10 @@ def create_raawa_file(matching_sites, personnel_list, scope_of_work, start_date,
         
         # Set security approver based on region
         if region == 'VIS':
-            safe_set_cell(50, 1, "JOJO A. VIRAY\nSignature Over Printed Name / Date")
+            ws["A50"].value = "JOJO A. VIRAY\nSignature Over Printed Name / Date"
             st.info(f"🔒 VIS Region detected - Security Approver set to: JOJO A. VIRAY")
         elif region == 'LUZ':
-            safe_set_cell(50, 1, "TBD - Security Approver\nSignature Over Printed Name / Date")
+            ws["A50"].value = "TBD - Security Approver\nSignature Over Printed Name / Date"
             st.info(f"🔒 LUZ Region detected - Security Approver set to: TBD (Please update when known)")
         else:
             # For MIN and other regions: Keep the template default
