@@ -323,76 +323,44 @@ def load_databases():
             st.warning(f"Requisitioner.xlsx error: {e}")
             df_req = pd.DataFrame()
         
-        # Load Engineer/Technician Database
+        # --- FIXED: Load Engineer/Technician Database ---
         try:
             df_engr_tech = pd.read_excel(
                 "EngrTech.xlsx", 
-                header=1, 
+                header=1,  # Row 2 contains column headers
                 dtype=str
             )
             df_engr_tech.columns = df_engr_tech.columns.str.strip()
             
-            # Check if we need to map columns from EngrTech
-            # The file might have different column names
-            
             # Debug: Show columns found
             st.info(f"EngrTech columns: {', '.join(df_engr_tech.columns.tolist())}")
             
-            # Column mapping - check for different possible column names
-            possible_name_cols = ['Name', 'NAME', 'Full Name', 'FullName']
-            possible_company_cols = ['Company', 'COMPANY', 'Vendor', 'VENDOR']
-            possible_id_cols = ['ID No', 'ID', 'SEC ID', 'SEC_ID', 'Employee ID']
-            possible_region_cols = ['Region', 'REGION', 'Area']
+            # Ensure we have the required columns
+            # If the columns are not named correctly, map them
+            if 'Name' not in df_engr_tech.columns:
+                # Try to find the Name column
+                for col in df_engr_tech.columns:
+                    if col.lower() in ['name', 'full name', 'engineer']:
+                        df_engr_tech.rename(columns={col: 'Name'}, inplace=True)
+                        break
             
-            # Map Name column
-            name_col = None
-            for col in possible_name_cols:
-                if col in df_engr_tech.columns:
-                    name_col = col
-                    break
+            if 'Company' not in df_engr_tech.columns:
+                for col in df_engr_tech.columns:
+                    if col.lower() in ['company', 'vendor', 'firm']:
+                        df_engr_tech.rename(columns={col: 'Company'}, inplace=True)
+                        break
             
-            # Map Company column
-            company_col = None
-            for col in possible_company_cols:
-                if col in df_engr_tech.columns:
-                    company_col = col
-                    break
+            if 'ID No' not in df_engr_tech.columns:
+                for col in df_engr_tech.columns:
+                    if col.lower() in ['id no', 'id', 'sec id', 'employee id']:
+                        df_engr_tech.rename(columns={col: 'ID No'}, inplace=True)
+                        break
             
-            # Map ID column
-            id_col = None
-            for col in possible_id_cols:
-                if col in df_engr_tech.columns:
-                    id_col = col
-                    break
-            
-            # Map Region column
-            region_col = None
-            for col in possible_region_cols:
-                if col in df_engr_tech.columns:
-                    region_col = col
-                    break
-            
-            # Rename columns to standard names
-            if name_col and name_col != 'Name':
-                df_engr_tech.rename(columns={name_col: 'Name'}, inplace=True)
-            elif 'Name' not in df_engr_tech.columns:
-                # If no name column found, create a placeholder
-                df_engr_tech['Name'] = df_engr_tech.index.astype(str)
-            
-            if company_col and company_col != 'Company':
-                df_engr_tech.rename(columns={company_col: 'Company'}, inplace=True)
-            elif 'Company' not in df_engr_tech.columns:
-                df_engr_tech['Company'] = 'Unknown'
-            
-            if id_col and id_col != 'ID No':
-                df_engr_tech.rename(columns={id_col: 'ID No'}, inplace=True)
-            elif 'ID No' not in df_engr_tech.columns:
-                df_engr_tech['ID No'] = 'N/A'
-            
-            if region_col and region_col != 'Region':
-                df_engr_tech.rename(columns={region_col: 'Region'}, inplace=True)
-            elif 'Region' not in df_engr_tech.columns:
-                df_engr_tech['Region'] = 'N/A'
+            if 'Region' not in df_engr_tech.columns:
+                for col in df_engr_tech.columns:
+                    if col.lower() in ['region', 'area']:
+                        df_engr_tech.rename(columns={col: 'Region'}, inplace=True)
+                        break
             
             # Format IDs
             if 'ID No' in df_engr_tech.columns:
@@ -418,9 +386,16 @@ def load_databases():
                 df_engr_tech['Region'] = df_engr_tech['Region'].apply(
                     lambda x: x if x in ['LUZ', 'VIS', 'MIN'] else 'N/A'
                 )
+            
+            # Debug: Show data info
+            st.info(f"EngrTech data loaded: {len(df_engr_tech)} rows")
+            st.info(f"Regions found: {df_engr_tech['Region'].unique().tolist()}")
+            st.info(f"Companies found: {df_engr_tech['Company'].unique().tolist()}")
                 
         except Exception as e:
             st.warning(f"EngrTech.xlsx error: {e}")
+            import traceback
+            st.error(traceback.format_exc())
             df_engr_tech = pd.DataFrame(columns=['Name', 'Company', 'ID No', 'Region'])
         
         # Force garbage collection
@@ -434,7 +409,7 @@ def load_databases():
         st.error(traceback.format_exc())
         return None, None, None
 
-# --- RAAWA FILE CREATION (FIXED WITH PROPER MERGED CELL HANDLING) ---
+# --- RAAWA FILE CREATION ---
 def create_raawa_file(matching_sites, personnel_list, scope_of_work, start_date, end_date, req_profile, facility_manager, batch_num=1, total_batches=1):
     """Helper function to create a single RAAWA file with dynamic font sizing"""
     try:
@@ -539,16 +514,11 @@ def create_raawa_file(matching_sites, personnel_list, scope_of_work, start_date,
             safe_set_cell(41, 1, scope_of_work)
         
         # --- SET FACILITY MANAGER ---
-        # Get the current value of A48 to preserve the signature text
         current_a48 = ws["A48"].value
         if current_a48:
-            # Replace the name part while keeping the signature text
-            # The template has format: "NEW ENGINEER_AH\nSignature Over Printed Name / Date"
-            # We want: "KEVIN SALVACION\nSignature Over Printed Name / Date"
             if "\n" in str(current_a48):
                 parts = str(current_a48).split("\n", 1)
                 if len(parts) == 2:
-                    # Keep the signature part (the second part after newline)
                     signature_part = parts[1]
                     safe_set_cell(48, 1, f"{facility_manager}\n{signature_part}")
                 else:
@@ -564,11 +534,9 @@ def create_raawa_file(matching_sites, personnel_list, scope_of_work, start_date,
             first_site = matching_sites.iloc[0]
             region = str(first_site.get('REGION', '')).upper().strip()
         
-        # Get the current value of A50 to preserve the signature text
         current_a50 = ws["A50"].value
         
         if region == 'VIS':
-            # For VIS: Use JOJO A. VIRAY with signature text
             if current_a50 and "\n" in str(current_a50):
                 parts = str(current_a50).split("\n", 1)
                 if len(parts) == 2:
@@ -580,7 +548,6 @@ def create_raawa_file(matching_sites, personnel_list, scope_of_work, start_date,
                 safe_set_cell(50, 1, f"JOJO A. VIRAY\nSignature Over Printed Name / Date")
             st.info(f"🔒 VIS Region detected - Security Approver set to: JOJO A. VIRAY")
         elif region == 'LUZ':
-            # For LUZ: Use TBD with signature text
             if current_a50 and "\n" in str(current_a50):
                 parts = str(current_a50).split("\n", 1)
                 if len(parts) == 2:
@@ -591,35 +558,27 @@ def create_raawa_file(matching_sites, personnel_list, scope_of_work, start_date,
             else:
                 safe_set_cell(50, 1, f"TBD - Security Approver\nSignature Over Printed Name / Date")
             st.info(f"🔒 LUZ Region detected - Security Approver set to: TBD (Please update when known)")
-        # For MIN, keep template default (DIANALAN BALT)
         
         # --- APPLY CALIBRI 6 FONT TO ALL CELLS ---
         calibri_6 = Font(name="Calibri", size=6)
         calibri_6_underline = Font(name="Calibri", size=6, underline="single")
         
-        # Apply to all cells in the worksheet
         for row in ws.iter_rows(min_row=1, max_row=ws.max_row, min_col=1, max_col=11):
             for cell in row:
                 if cell.value:
-                    # Signature section (rows 48-55) - apply underline font
                     if cell.row >= 48 and cell.row <= 55:
                         safe_set_font(cell.row, cell.column, calibri_6_underline)
-                    # All other cells
                     else:
                         safe_set_font(cell.row, cell.column, calibri_6)
         
-        # Specifically ensure A48 and A50 have Calibri 6 with underline
         safe_set_font(48, 1, calibri_6_underline)
         safe_set_font(50, 1, calibri_6_underline)
-        
-        # Also ensure A41 (scope of work) has Calibri 6
         safe_set_font(41, 1, calibri_6)
         
         buffer = io.BytesIO()
         wb.save(buffer)
         buffer.seek(0)
         
-        # Clean up
         wb.close()
         gc.collect()
         
@@ -1426,7 +1385,14 @@ else:
                 | Jane Smith | Huawei | 67890 | VIS |
                 """)
             else:
+                # Display the full count of personnel loaded
                 st.success(f"📋 Found {len(df_engr_tech_db)} personnel records in database")
+                
+                # Show region breakdown
+                if 'Region' in df_engr_tech_db.columns:
+                    region_counts = df_engr_tech_db['Region'].value_counts().to_dict()
+                    region_summary = ", ".join([f"{k}: {v}" for k, v in region_counts.items()])
+                    st.info(f"📊 Region breakdown: {region_summary}")
                 
                 with st.expander("📁 Select Personnel from Database", expanded=True):
                     # Get unique companies and regions
