@@ -435,10 +435,6 @@ def load_databases():
         return None, None, None
 
 # --- RAAWA FILE CREATION (FIXED WITH PROPER MERGED CELL HANDLING) ---
-# --- RAAWA FILE CREATION (FIXED WITH PROPER MERGED CELL HANDLING) ---
-# --- RAAWA FILE CREATION (FIXED WITH PROPER MERGED CELL HANDLING) ---
-# --- RAAWA FILE CREATION (FIXED WITH PROPER MERGED CELL HANDLING) ---
-# --- RAAWA FILE CREATION (FIXED WITH PROPER MERGED CELL HANDLING) ---
 def create_raawa_file(matching_sites, personnel_list, scope_of_work, start_date, end_date, req_profile, facility_manager, batch_num=1, total_batches=1):
     """Helper function to create a single RAAWA file with dynamic font sizing"""
     try:
@@ -1018,7 +1014,6 @@ st.sidebar.markdown("""
 """, unsafe_allow_html=True)
 
 # --- ABOUT PAGE ---
-# --- ABOUT PAGE ---
 if page == "ℹ️ About & Developer":
     st.markdown("""
     <div class="main-header">
@@ -1442,15 +1437,12 @@ else:
                     if 'Region' in df_engr_tech_db.columns:
                         region_list = sorted(df_engr_tech_db['Region'].unique())
                         region_list = [r for r in region_list if str(r).strip() != '']
-                        # Add 'N/A' to region list if it exists
+                        # Move 'N/A' to the end if it exists
                         if 'N/A' in region_list:
                             region_list.remove('N/A')
-                            region_list = ['All Regions'] + ['N/A'] + region_list
-                        else:
-                            region_list = ['All Regions'] + region_list
+                            region_list.append('N/A')
+                        region_list = ['All Regions'] + region_list
                     else:
-                        # If no Region column, show a message
-                        st.info("No Region column found in personnel database")
                         region_list = ['All Regions']
                     
                     # Filters in columns
@@ -1483,14 +1475,14 @@ else:
                     with col_filters[2]:
                         search_term = st.text_input("🔍 Search:", key="personnel_search_main")
                     
-                    # Apply filters
+                    # Apply filters - FIXED LOGIC
                     filtered_engr = df_engr_tech_db.copy()
                     
-                    # Company filter
+                    # Company filter - FIXED: Only filter if not "All Companies"
                     if selected_companies and 'All Companies' not in selected_companies:
                         filtered_engr = filtered_engr[filtered_engr['Company'].isin(selected_companies)]
                     
-                    # Region filter
+                    # Region filter - FIXED: Only filter if not "All Regions"
                     if selected_regions and 'All Regions' not in selected_regions:
                         if 'Region' in filtered_engr.columns:
                             filtered_engr = filtered_engr[filtered_engr['Region'].isin(selected_regions)]
@@ -1697,9 +1689,8 @@ else:
                         region_list = [r for r in region_list if str(r).strip() != '']
                         if 'N/A' in region_list:
                             region_list.remove('N/A')
-                            region_list = ['All Regions'] + ['N/A'] + region_list
-                        else:
-                            region_list = ['All Regions'] + region_list
+                            region_list.append('N/A')
+                        region_list = ['All Regions'] + region_list
                     else:
                         region_list = ['All Regions']
                     
@@ -1731,12 +1722,14 @@ else:
                     with col_filters[2]:
                         search_term = st.text_input("🔍 Search:", key="mixed_search")
                     
-                    # Apply filters
+                    # Apply filters - FIXED LOGIC
                     filtered_engr = df_engr_tech_db.copy()
                     
+                    # Company filter - FIXED: Only filter if not "All Companies"
                     if selected_companies and 'All Companies' not in selected_companies:
                         filtered_engr = filtered_engr[filtered_engr['Company'].isin(selected_companies)]
                     
+                    # Region filter - FIXED: Only filter if not "All Regions"
                     if selected_regions and 'All Regions' not in selected_regions:
                         if 'Region' in filtered_engr.columns:
                             filtered_engr = filtered_engr[filtered_engr['Region'].isin(selected_regions)]
