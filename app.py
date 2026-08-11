@@ -1318,7 +1318,7 @@ else:
         with scope_col:
             scope_of_work = st.text_area(
                 "Nature of Access / Detailed Scope of Work:",
-                value="SITE SURVEY, INSTALLATION, INTEGRATION, AND ACCEPTANCE TESTING.",
+                value="SITE SURVEY, INSTALLATION, INTEGRATION, AND ACCEPTANCE TESTING OF NOKIA OLT.",
                 height=100
             )
         with date_col:
