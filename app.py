@@ -92,11 +92,14 @@ st.markdown("""
 # --- UTILITY FUNCTIONS ---
 def format_contact_number(contact):
     """Format contact number to start with 0 and have 11 digits"""
-    if not contact or pd.isna(contact) or contact == 'N/A':
+    if not contact or pd.isna(contact) or contact == 'N/A' or contact == '':
         return "N/A"
     
     contact_str = str(contact).strip()
     contact_str = ''.join(filter(str.isdigit, contact_str))
+    
+    if len(contact_str) == 0:
+        return "N/A"
     
     if len(contact_str) == 10:
         if contact_str.startswith('9'):
@@ -117,7 +120,7 @@ def format_contact_number(contact):
 
 def format_id_number(id_num):
     """Format ID number to remove decimal places"""
-    if not id_num or pd.isna(id_num) or id_num == 'N/A':
+    if not id_num or pd.isna(id_num) or id_num == 'N/A' or id_num == '':
         return "N/A"
     
     id_str = str(id_num).strip()
@@ -291,7 +294,7 @@ def load_databases():
         if 'SITE_ADD' in df_sites.columns:
             df_sites['SITE_ADD'] = df_sites['SITE_ADD'].astype(str).str.strip()
         
-        # Load Requisitioner Database with memory optimization
+        # --- Load Requisitioner Database with improved handling of empty cells ---
         try:
             df_req = pd.read_excel(
                 "Requisitioner.xlsx", 
@@ -302,28 +305,68 @@ def load_databases():
             
             # Show columns for debug
             st.info(f"Requisitioner columns: {', '.join(df_req.columns.tolist())}")
+            st.info(f"Requisitioner rows: {len(df_req)}")
             
+            # Fill NaN values with empty string for better handling
+            df_req = df_req.fillna('')
+            
+            # Ensure Territory no. column exists and clean it
             if 'Territory no.' in df_req.columns:
                 df_req['Territory no.'] = df_req['Territory no.'].astype(str).str.replace('Territory', '', case=False).str.strip()
+                df_req['Territory no.'] = df_req['Territory no.'].apply(lambda x: x if x and x != '' and x != 'nan' else 'N/A')
+            else:
+                df_req['Territory no.'] = 'N/A'
             
+            # Ensure Region column exists and clean it
             if 'Region' in df_req.columns:
                 df_req['Region'] = df_req['Region'].astype(str).str.upper().str.strip()
                 df_req['Region'] = df_req['Region'].apply(lambda x: x if x in ['LUZ', 'VIS', 'MIN'] else 'MIN')
+            else:
+                df_req['Region'] = 'MIN'
             
+            # Ensure Project column exists and clean it
             if 'Project' in df_req.columns:
                 df_req['Project'] = df_req['Project'].astype(str).str.strip()
+                df_req['Project'] = df_req['Project'].apply(lambda x: x if x and x != '' and x != 'nan' else 'Default')
+            else:
+                df_req['Project'] = 'Default'
             
-            # Batch process formatting for speed
+            # Ensure Name column exists
+            if 'Name' not in df_req.columns:
+                df_req['Name'] = 'N/A'
+            else:
+                df_req['Name'] = df_req['Name'].apply(lambda x: x if x and x != '' and x != 'nan' else 'N/A')
+            
+            # Ensure Dept./Group column exists
+            if 'Dept./Group' not in df_req.columns:
+                df_req['Dept./Group'] = 'N/A'
+            else:
+                df_req['Dept./Group'] = df_req['Dept./Group'].apply(lambda x: x if x and x != '' and x != 'nan' else 'N/A')
+            
+            # Format IDs - handle empty values
             if 'ID #' in df_req.columns:
-                df_req['ID #'] = df_req['ID #'].apply(lambda x: format_id_number(x) if pd.notna(x) else 'N/A')
+                df_req['ID #'] = df_req['ID #'].apply(lambda x: format_id_number(x) if x and x != '' and x != 'nan' else 'N/A')
+            else:
+                df_req['ID #'] = 'N/A'
             
+            # Format Contact No. - handle empty values
             if 'Contact No.' in df_req.columns:
-                df_req['Contact No.'] = df_req['Contact No.'].apply(lambda x: format_contact_number(x) if pd.notna(x) else 'N/A')
+                df_req['Contact No.'] = df_req['Contact No.'].apply(lambda x: format_contact_number(x) if x and x != '' and x != 'nan' else 'N/A')
+            else:
+                df_req['Contact No.'] = 'N/A'
+            
+            # Show processed data info
+            st.info(f"Processed Requisitioner rows: {len(df_req)}")
+            st.info(f"Unique Territories: {df_req['Territory no.'].unique().tolist()}")
+            st.info(f"Unique Projects: {df_req['Project'].unique().tolist()}")
+                    
         except Exception as e:
             st.warning(f"Requisitioner.xlsx error: {e}")
-            df_req = pd.DataFrame()
+            import traceback
+            st.error(traceback.format_exc())
+            df_req = pd.DataFrame(columns=['Name', 'Dept./Group', 'ID #', 'Contact No.', 'Territory no.', 'Project', 'Region'])
         
-        # --- FIXED: Load Engineer/Technician Database ---
+        # --- Load Engineer/Technician Database ---
         try:
             df_engr_tech = pd.read_excel(
                 "EngrTech.xlsx", 
@@ -334,6 +377,7 @@ def load_databases():
             
             # Debug: Show columns found
             st.info(f"EngrTech columns: {', '.join(df_engr_tech.columns.tolist())}")
+            st.info(f"EngrTech rows: {len(df_engr_tech)}")
             
             # Ensure we have the required columns
             # If the columns are not named correctly, map them
@@ -343,24 +387,32 @@ def load_databases():
                     if col.lower() in ['name', 'full name', 'engineer']:
                         df_engr_tech.rename(columns={col: 'Name'}, inplace=True)
                         break
+                else:
+                    df_engr_tech['Name'] = df_engr_tech.index.astype(str)
             
             if 'Company' not in df_engr_tech.columns:
                 for col in df_engr_tech.columns:
                     if col.lower() in ['company', 'vendor', 'firm']:
                         df_engr_tech.rename(columns={col: 'Company'}, inplace=True)
                         break
+                else:
+                    df_engr_tech['Company'] = 'Unknown'
             
             if 'ID No' not in df_engr_tech.columns:
                 for col in df_engr_tech.columns:
                     if col.lower() in ['id no', 'id', 'sec id', 'employee id']:
                         df_engr_tech.rename(columns={col: 'ID No'}, inplace=True)
                         break
+                else:
+                    df_engr_tech['ID No'] = 'N/A'
             
             if 'Region' not in df_engr_tech.columns:
                 for col in df_engr_tech.columns:
                     if col.lower() in ['region', 'area']:
                         df_engr_tech.rename(columns={col: 'Region'}, inplace=True)
                         break
+                else:
+                    df_engr_tech['Region'] = 'N/A'
             
             # Format IDs
             if 'ID No' in df_engr_tech.columns:
@@ -676,57 +728,60 @@ def check_conflicts(matching_sites):
 def get_requisitioner_for_territory_and_project(territory, project, region):
     """Get requisitioner profile based on territory, project, and region (auto mode)"""
     if df_req_db is not None and 'Territory no.' in df_req_db.columns:
-        # Try exact match first
+        # Try exact match first - handle missing values gracefully
         matching_reqs = df_req_db[
-            (df_req_db['Territory no.'] == territory) &
-            (df_req_db['Project'] == project) &
-            (df_req_db['Region'] == region)
+            (df_req_db['Territory no.'].astype(str).str.strip() == str(territory).strip()) &
+            (df_req_db['Project'].astype(str).str.strip() == str(project).strip()) &
+            (df_req_db['Region'].astype(str).str.strip() == str(region).strip())
         ]
         
         if not matching_reqs.empty:
             req_row = matching_reqs.iloc[0]
+            # Handle missing values with .get() and default values
             return {
-                "name": str(req_row.get("Name", "N/A")),
-                "dept": str(req_row.get("Dept./Group", "N/A")),
-                "id": format_id_number(req_row.get("ID #", "N/A")),
-                "contact": format_contact_number(req_row.get("Contact No.", "N/A"))
+                "name": str(req_row.get('Name', 'N/A')) if pd.notna(req_row.get('Name')) and req_row.get('Name') != '' else 'N/A',
+                "dept": str(req_row.get('Dept./Group', 'N/A')) if pd.notna(req_row.get('Dept./Group')) and req_row.get('Dept./Group') != '' else 'N/A',
+                "id": format_id_number(req_row.get('ID #', 'N/A')) if pd.notna(req_row.get('ID #')) and req_row.get('ID #') != '' else 'N/A',
+                "contact": format_contact_number(req_row.get('Contact No.', 'N/A')) if pd.notna(req_row.get('Contact No.')) and req_row.get('Contact No.') != '' else 'N/A'
             }
         
         # If exact match fails, try partial match
         if project:
             base_project = project.split(' - ')[0] if ' - ' in project else project
             
+            # Partial match - handle missing values
             matching_reqs = df_req_db[
-                (df_req_db['Territory no.'] == territory) &
-                (df_req_db['Project'].str.contains(base_project, case=False, na=False)) &
-                (df_req_db['Region'] == region)
+                (df_req_db['Territory no.'].astype(str).str.strip() == str(territory).strip()) &
+                (df_req_db['Project'].astype(str).str.contains(base_project, case=False, na=False)) &
+                (df_req_db['Region'].astype(str).str.strip() == str(region).strip())
             ]
             
             if not matching_reqs.empty:
                 req_row = matching_reqs.iloc[0]
                 return {
-                    "name": str(req_row.get("Name", "N/A")),
-                    "dept": str(req_row.get("Dept./Group", "N/A")),
-                    "id": format_id_number(req_row.get("ID #", "N/A")),
-                    "contact": format_contact_number(req_row.get("Contact No.", "N/A"))
+                    "name": str(req_row.get('Name', 'N/A')) if pd.notna(req_row.get('Name')) and req_row.get('Name') != '' else 'N/A',
+                    "dept": str(req_row.get('Dept./Group', 'N/A')) if pd.notna(req_row.get('Dept./Group')) and req_row.get('Dept./Group') != '' else 'N/A',
+                    "id": format_id_number(req_row.get('ID #', 'N/A')) if pd.notna(req_row.get('ID #')) and req_row.get('ID #') != '' else 'N/A',
+                    "contact": format_contact_number(req_row.get('Contact No.', 'N/A')) if pd.notna(req_row.get('Contact No.')) and req_row.get('Contact No.') != '' else 'N/A'
                 }
     
     # Fallback - try without project filter
     if df_req_db is not None and 'Territory no.' in df_req_db.columns:
         matching_reqs = df_req_db[
-            (df_req_db['Territory no.'] == territory) &
-            (df_req_db['Region'] == region)
+            (df_req_db['Territory no.'].astype(str).str.strip() == str(territory).strip()) &
+            (df_req_db['Region'].astype(str).str.strip() == str(region).strip())
         ]
         
         if not matching_reqs.empty:
             req_row = matching_reqs.iloc[0]
             return {
-                "name": str(req_row.get("Name", "N/A")),
-                "dept": str(req_row.get("Dept./Group", "N/A")),
-                "id": format_id_number(req_row.get("ID #", "N/A")),
-                "contact": format_contact_number(req_row.get("Contact No.", "N/A"))
+                "name": str(req_row.get('Name', 'N/A')) if pd.notna(req_row.get('Name')) and req_row.get('Name') != '' else 'N/A',
+                "dept": str(req_row.get('Dept./Group', 'N/A')) if pd.notna(req_row.get('Dept./Group')) and req_row.get('Dept./Group') != '' else 'N/A',
+                "id": format_id_number(req_row.get('ID #', 'N/A')) if pd.notna(req_row.get('ID #')) and req_row.get('ID #') != '' else 'N/A',
+                "contact": format_contact_number(req_row.get('Contact No.', 'N/A')) if pd.notna(req_row.get('Contact No.')) and req_row.get('Contact No.') != '' else 'N/A'
             }
     
+    # Ultimate fallback with default values
     return {
         "name": f"Territory {territory} Engineer",
         "dept": f"TERRITORY {territory}",
@@ -1189,9 +1244,13 @@ else:
         
         if df_req_db is not None and 'Project' in df_req_db.columns:
             project_list = sorted(df_req_db['Project'].dropna().unique())
-            project_list = [p for p in project_list if str(p).strip() != '' and str(p).strip() != 'nan']
+            project_list = [p for p in project_list if str(p).strip() != '' and str(p).strip() != 'nan' and str(p).strip() != 'Default']
         else:
             project_list = ['Default']
+        
+        # Add 'Default' if not in list
+        if 'Default' not in project_list:
+            project_list = ['Default'] + project_list
         
         col_project, col_region = st.columns(2)
         
