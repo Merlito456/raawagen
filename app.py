@@ -462,6 +462,7 @@ def load_databases():
         return None, None, None
 
 # --- RAAWA FILE CREATION ---
+# --- RAAWA FILE CREATION ---
 def create_raawa_file(matching_sites, personnel_list, scope_of_work, start_date, end_date, req_profile, facility_manager, batch_num=1, total_batches=1):
     """Helper function to create a single RAAWA file with dynamic font sizing"""
     try:
@@ -473,17 +474,13 @@ def create_raawa_file(matching_sites, personnel_list, scope_of_work, start_date,
         def safe_set_cell(row, col, value):
             """Safely set a cell value, handling merged cells"""
             cell = ws.cell(row=row, column=col)
-            # Check if this cell is part of a merged range
             for merged_range in ws.merged_cells.ranges:
                 if cell.coordinate in merged_range:
-                    # Only write if this is the top-left cell of the merged range
                     if cell.coordinate == merged_range.start_cell.coordinate:
                         cell.value = value
                         return cell
                     else:
-                        # Skip - this is a merged cell that's not the top-left
                         return None
-            # Not merged, safe to write
             cell.value = value
             return cell
         
@@ -491,16 +488,13 @@ def create_raawa_file(matching_sites, personnel_list, scope_of_work, start_date,
         def safe_set_font(row, col, font):
             """Safely set font on a cell, handling merged cells"""
             cell = ws.cell(row=row, column=col)
-            # Check if this cell is part of a merged range
             for merged_range in ws.merged_cells.ranges:
                 if cell.coordinate in merged_range:
-                    # Only set font if this is the top-left cell of the merged range
                     if cell.coordinate == merged_range.start_cell.coordinate:
                         cell.font = font
                         return True
                     else:
                         return False
-            # Not merged, safe to set font
             cell.font = font
             return True
         
@@ -539,18 +533,14 @@ def create_raawa_file(matching_sites, personnel_list, scope_of_work, start_date,
             
             formatted_id = format_id_number(person["id_no"])
             
-            # Try to set each cell with merged cell handling
-            # Name - Column 1 or 6
             name_cell = safe_set_cell(row_index, 1 + col_offset, person["name"])
             if name_cell:
                 name_cell.font = Font(name="Calibri", size=6)
             
-            # Company - Column 4 or 9
             company_cell = safe_set_cell(row_index, 4 + col_offset, person["company"])
             if company_cell:
                 company_cell.font = Font(name="Calibri", size=6)
             
-            # ID - Column 5 or 10
             id_cell = safe_set_cell(row_index, 5 + col_offset, formatted_id)
             if id_cell:
                 id_cell.font = Font(name="Calibri", size=6)
@@ -580,36 +570,50 @@ def create_raawa_file(matching_sites, personnel_list, scope_of_work, start_date,
         else:
             safe_set_cell(48, 1, f"{facility_manager}\nSignature Over Printed Name / Date")
         
-        # --- SET SECURITY APPROVER ---
+        # ============================================================
+        # --- SET SECURITY APPROVER (BY TERRITORY) ---
+        # ============================================================
+        # Determine region and territory from the first selected site
         region = ''
+        territory = ''
         if not matching_sites.empty:
             first_site = matching_sites.iloc[0]
             region = str(first_site.get('REGION', '')).upper().strip()
+            territory = str(first_site.get('TERRITORY', '')).strip()
+            
+            # Normalize territory (strip any "Territory" prefix and trailing .0)
+            territory = territory.replace('Territory', '').replace('territory', '').strip()
+            if territory.endswith('.0'):
+                territory = territory[:-2]
         
-        current_a50 = ws["A50"].value
+        # Determine the security approver name based on TERRITORY first, then REGION
+        security_approver_name = None
         
-        if region == 'VIS':
-            if current_a50 and "\n" in str(current_a50):
-                parts = str(current_a50).split("\n", 1)
-                if len(parts) == 2:
-                    signature_part = parts[1]
-                    safe_set_cell(50, 1, f"JOJO A. VIRAY\n{signature_part}")
-                else:
-                    safe_set_cell(50, 1, f"JOJO A. VIRAY\nSignature Over Printed Name / Date")
-            else:
-                safe_set_cell(50, 1, f"JOJO A. VIRAY\nSignature Over Printed Name / Date")
+        if territory == '7':
+            security_approver_name = "ERICK BERGAVERA"
+            st.info(f"🔒 Territory 7 detected - Security Approver set to: ERICK BERGAVERA")
+        elif territory == '8':
+            security_approver_name = "DIANALAN BALT"
+            st.info(f"🔒 Territory 8 detected - Security Approver set to: DIANALAN BALT")
+        elif region == 'VIS':
+            security_approver_name = "JOJO A. VIRAY"
             st.info(f"🔒 VIS Region detected - Security Approver set to: JOJO A. VIRAY")
         elif region == 'LUZ':
+            security_approver_name = "TBD - Security Approver"
+            st.info(f"🔒 LUZ Region detected - Security Approver set to: TBD (Please update when known)")
+        # For MIN without a matching territory → keep the template default (DIANALAN BALT)
+        
+        if security_approver_name:
+            current_a50 = ws["A50"].value
             if current_a50 and "\n" in str(current_a50):
                 parts = str(current_a50).split("\n", 1)
                 if len(parts) == 2:
                     signature_part = parts[1]
-                    safe_set_cell(50, 1, f"TBD - Security Approver\n{signature_part}")
+                    safe_set_cell(50, 1, f"{security_approver_name}\n{signature_part}")
                 else:
-                    safe_set_cell(50, 1, f"TBD - Security Approver\nSignature Over Printed Name / Date")
+                    safe_set_cell(50, 1, f"{security_approver_name}\nSignature Over Printed Name / Date")
             else:
-                safe_set_cell(50, 1, f"TBD - Security Approver\nSignature Over Printed Name / Date")
-            st.info(f"🔒 LUZ Region detected - Security Approver set to: TBD (Please update when known)")
+                safe_set_cell(50, 1, f"{security_approver_name}\nSignature Over Printed Name / Date")
         
         # --- APPLY CALIBRI 6 FONT TO ALL CELLS ---
         calibri_6 = Font(name="Calibri", size=6)
@@ -641,7 +645,6 @@ def create_raawa_file(matching_sites, personnel_list, scope_of_work, start_date,
         import traceback
         st.error(traceback.format_exc())
         return None
-
 # --- SITE GROUPING FUNCTIONS ---
 def split_sites_by_territory_and_fm(matching_sites):
     """Split sites by unique combinations of Territory and Facility Manager, then further split if > 10 sites per group"""
